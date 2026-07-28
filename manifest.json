@@ -3,7 +3,7 @@
   "name": "Pull Deck",
   "version": "1.0.0",
   "description": "See every pull request waiting on you, and open them all into one tab group without ever duplicating a tab.",
-  "minimum_chrome_version": "89",
+  "minimum_chrome_version": "99",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",

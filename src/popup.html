@@ -27,18 +27,18 @@
 
       <nav class="segments" id="segments" role="tablist" aria-label="Pull request scope">
         <div class="segments-indicator" id="segments-indicator"></div>
-        <button class="segment" type="button" role="tab" data-scope="mine" aria-selected="true">
+        <button class="segment" type="button" role="tab" id="tab-mine" aria-controls="stage" data-scope="mine" aria-selected="true">
           Mine <span class="segment-count" data-count="mine"></span>
         </button>
-        <button class="segment" type="button" role="tab" data-scope="reviewing" aria-selected="false" tabindex="-1">
+        <button class="segment" type="button" role="tab" id="tab-reviewing" aria-controls="stage" data-scope="reviewing" aria-selected="false" tabindex="-1">
           Reviews <span class="segment-count" data-count="reviewing"></span>
         </button>
-        <button class="segment" type="button" role="tab" data-scope="assigned" aria-selected="false" tabindex="-1">
+        <button class="segment" type="button" role="tab" id="tab-assigned" aria-controls="stage" data-scope="assigned" aria-selected="false" tabindex="-1">
           Assigned <span class="segment-count" data-count="assigned"></span>
         </button>
       </nav>
 
-      <main class="stage" id="stage">
+      <main class="stage" id="stage" role="tabpanel" aria-labelledby="tab-mine">
         <section class="view" data-name="loading" aria-label="Loading pull requests" data-active>
           <div class="skeleton-group" id="skeleton"></div>
         </section>

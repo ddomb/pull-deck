@@ -10,6 +10,19 @@ import { pullRequestKey } from './pr-url.js';
 const NO_GROUP = -1; // chrome.tabGroups.TAB_GROUP_ID_NONE
 
 /**
+ * The URL a tab is at or is going to.
+ *
+ * Deliberately `||` and not `??`. A tab that has not committed its navigation
+ * yet reports `url: ""` with the real destination in `pendingUrl`, and `""` is
+ * not nullish — `??` would hand back the empty string and never consult
+ * `pendingUrl` in precisely the case it exists for. That reads as "no pull
+ * request here", and the tab gets opened a second time.
+ */
+function tabUrl(tab) {
+  return tab.url || tab.pendingUrl || '';
+}
+
+/**
  * Locate the group we should be filling.
  *
  * Identity is the saved id first, title second. Title-only lookup breaks the
@@ -67,7 +80,7 @@ export async function openIntoGroup({
   const inGroup = group ? await chrome.tabs.query({ groupId: group.id }) : [];
   const present = new Set();
   for (const tab of inGroup) {
-    const key = pullRequestKey(tab.url ?? tab.pendingUrl);
+    const key = pullRequestKey(tabUrl(tab));
     if (key) present.add(key);
   }
 
@@ -86,7 +99,10 @@ export async function openIntoGroup({
   const strays = new Map();
   for (const tab of await chrome.tabs.query({ windowId: targetWindowId })) {
     if (group && tab.groupId === group.id) continue;
-    const key = pullRequestKey(tab.url ?? tab.pendingUrl);
+    // Leave pinned tabs where they are: grouping one is at best a surprise,
+    // and at worst it rejects and strands the whole batch ungrouped.
+    if (tab.pinned) continue;
+    const key = pullRequestKey(tabUrl(tab));
     if (key && !strays.has(key)) strays.set(key, tab.id);
   }
 
@@ -96,7 +112,7 @@ export async function openIntoGroup({
   const tabIdByPr = {};
   const tabIdByKey = new Map();
   for (const tab of inGroup) {
-    const key = pullRequestKey(tab.url ?? tab.pendingUrl);
+    const key = pullRequestKey(tabUrl(tab));
     if (key && !tabIdByKey.has(key)) tabIdByKey.set(key, tab.id);
   }
 
@@ -201,7 +217,7 @@ export async function readGroupState({ savedGroupId, title }) {
   const tabs = await chrome.tabs.query({ groupId: group.id });
   const keys = [];
   for (const tab of tabs) {
-    const key = pullRequestKey(tab.url ?? tab.pendingUrl);
+    const key = pullRequestKey(tabUrl(tab));
     if (key) keys.push(key);
   }
   return { groupId: group.id, keys, otherWindow: group.windowId !== focused };

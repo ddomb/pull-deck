@@ -4,6 +4,7 @@
 
 import { icons } from './icons.js';
 import { GROUP_COLORS } from './store.js';
+import { pullRequestKey } from './pr-url.js';
 
 /* ------------------------------------------------------------- transport -- */
 
@@ -38,6 +39,7 @@ const state = {
   error: null,
   focusIndex: 0,
   busy: false,
+  firstLoad: true,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -49,6 +51,7 @@ const dom = {
   openSettings: $('open-settings'),
   segments: $('segments'),
   indicator: $('segments-indicator'),
+  stage: $('stage'),
   skeleton: $('skeleton'),
   list: $('pr-list'),
   emptyNotice: $('empty-notice'),
@@ -107,19 +110,6 @@ function age(iso) {
   const weeks = days / 7;
   if (weeks < 53) return `${Math.floor(weeks)}w`;
   return `${Math.floor(days / 365)}y`;
-}
-
-/** Same identity rule as pr-url.js, kept in sync for group membership checks. */
-function pullRequestKey(url) {
-  try {
-    const parsed = new URL(url);
-    const [owner, repo, kind, number] = parsed.pathname.split('/').filter(Boolean);
-    if ((kind !== 'pull' && kind !== 'pulls') || !/^\d+$/.test(number)) return null;
-    const host = parsed.host.toLowerCase().replace(/^www\./, '');
-    return `${host}/${owner.toLowerCase()}/${repo.toLowerCase()}#${Number(number)}`;
-  } catch {
-    return null;
-  }
 }
 
 const visible = () => state.scopes[state.scope] ?? [];
@@ -276,6 +266,8 @@ function renderSkeleton() {
 
 function renderSegments() {
   dom.segments.dataset.scope = state.scope;
+  // The stage is the panel these tabs control; name it after the active tab.
+  dom.stage.setAttribute('aria-labelledby', `tab-${state.scope}`);
   for (const button of dom.segments.querySelectorAll('.segment')) {
     const scope = button.dataset.scope;
     const selected = scope === state.scope;
@@ -506,10 +498,16 @@ function apply(data) {
   }
   state.error = data.error ?? null;
 
-  // Land on a scope that actually has something in it.
-  if (data.stage === 'list' && (state.scopes[state.scope] ?? []).length === 0) {
-    const populated = SCOPES.find((scope) => (state.scopes[scope] ?? []).length > 0);
-    if (populated) state.scope = populated;
+  // Land on a scope that has something in it, but only on the first load.
+  // Doing it on every refresh means a user sitting on an empty "Assigned" and
+  // pressing ⌘R to check for news gets yanked back to "Mine" every time, and
+  // the Open All button silently retargets a different set of pull requests.
+  if (state.firstLoad && data.stage === 'list') {
+    if ((state.scopes[state.scope] ?? []).length === 0) {
+      const populated = SCOPES.find((scope) => (state.scopes[scope] ?? []).length > 0);
+      if (populated) state.scope = populated;
+    }
+    state.firstLoad = false;
   }
   render();
 }
@@ -595,6 +593,10 @@ function glyphCheck() {
 /* ---------------------------------------------------------------- settings -- */
 
 function openSettings() {
+  // render() bails before renderSettings() on any non-list stage, but the panel
+  // is reachable from the error screen. Without this the colour picker is empty
+  // and the controls show HTML defaults that overwrite real settings on change.
+  renderSettings();
   dom.settings.setAttribute('data-open', '');
   dom.settings.setAttribute('aria-hidden', 'false');
   dom.closeSettings.focus();

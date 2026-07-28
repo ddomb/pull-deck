@@ -459,14 +459,22 @@ svg {
   opacity: 0;
   transform: translateY(4px);
   pointer-events: none;
+  /* visibility, not just opacity: `pointer-events: none` stops the mouse but
+     does nothing for the keyboard, so without this Tab walks off the last row
+     into the hidden onboarding view and lands on an invisible password field. */
+  visibility: hidden;
   transition: opacity var(--dur-fast) var(--ease-out-quart),
-    transform var(--dur-fast) var(--ease-out-quart);
+    transform var(--dur-fast) var(--ease-out-quart),
+    visibility var(--dur-fast) step-end;
 }
 
 .view[data-active] {
   opacity: 1;
   transform: none;
   pointer-events: auto;
+  visibility: visible;
+  transition: opacity var(--dur-fast) var(--ease-out-quart),
+    transform var(--dur-fast) var(--ease-out-quart), visibility 0s;
 }
 
 /* A row cut off by the scroll edge looks like a rendering fault. Fading it out
@@ -795,7 +803,7 @@ svg {
   font-size: 0.92em;
   padding: 1px 4px;
   border-radius: 4px;
-  background: var(--surface-sunken);
+  background: var(--chip-bg);
 }
 
 /* ============================================================== dock ===== */

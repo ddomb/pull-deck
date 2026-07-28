@@ -194,6 +194,49 @@ test('a renamed group is still found by saved id, and its title is restored', as
   assert.deepEqual(calls.updated, [{ id: 42, title: 'Pull Requests', color: 'cyan' }]);
 });
 
+test('a tab still loading counts as present, via pendingUrl', async () => {
+  // Chrome reports url:"" (not undefined) until navigation commits. `??` would
+  // hand back "" and never look at pendingUrl, so reopening the popup while the
+  // tabs were still loading used to duplicate every single one of them.
+  const { calls } = fakeChrome({
+    groups: [GROUP],
+    tabs: [
+      { id: 1, url: '', pendingUrl: 'https://github.com/abovesec/api/pull/1', groupId: 42 },
+      { id: 2, url: '', pendingUrl: 'https://github.com/abovesec/api/pull/2', groupId: 42 },
+    ],
+  });
+
+  const result = await openIntoGroup({ ...base, pullRequests: [PR(1), PR(2), PR(3)] });
+
+  assert.equal(result.skipped, 2, 'both in-flight tabs are recognised');
+  assert.deepEqual(calls.created.map((c) => c.url), [
+    'https://github.com/abovesec/api/pull/3',
+  ]);
+});
+
+test('readGroupState sees pull requests whose tabs have not committed yet', async () => {
+  fakeChrome({
+    groups: [GROUP],
+    tabs: [{ id: 1, url: '', pendingUrl: 'https://github.com/abovesec/api/pull/9', groupId: 42 }],
+  });
+  const state = await readGroupState({ savedGroupId: 42, title: 'Pull Requests' });
+  assert.deepEqual(state.keys, ['github.com/abovesec/api#9']);
+});
+
+test('a pinned tab is never dragged into the group', async () => {
+  const { calls } = fakeChrome({
+    groups: [GROUP],
+    tabs: [
+      { id: 5, url: 'https://github.com/abovesec/api/pull/1', groupId: -1, pinned: true },
+    ],
+  });
+
+  const result = await openIntoGroup({ ...base, pullRequests: [PR(1)] });
+
+  assert.equal(result.adopted, 0);
+  assert.ok(!calls.grouped[0].tabIds.includes(5), 'pinned tabs stay pinned where they are');
+});
+
 test('unreadable tab urls are reported rather than silently duplicating', async () => {
   const { calls } = fakeChrome({
     groups: [GROUP],

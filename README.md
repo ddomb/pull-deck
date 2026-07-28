@@ -20,7 +20,7 @@ open -a "Google Chrome" --args --new-window "chrome://extensions"
 3. Choose this folder: `/Users/ddomb/pull-deck`
 4. Pin Pull Deck to the toolbar so the badge count is visible.
 
-Works the same in Edge (`edge://extensions`) and Brave (`brave://extensions`). Needs Chrome 89+, which is when `chrome.tabGroups` shipped.
+Works the same in Edge (`edge://extensions`) and Brave (`brave://extensions`). Needs **Chrome 99+**: `chrome.tabGroups` shipped in 89, but `chrome.runtime.sendMessage` only started returning a promise in 99, and every call here is awaited.
 
 ## Connect a token
 

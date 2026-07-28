@@ -122,6 +122,23 @@ async function applySettings(patch) {
   const settings = await readSettings();
   if ('badgeEnabled' in allowed) await refreshBadge(settings.cache, settings);
 
+  // Push a rename or recolour straight to the live group. Otherwise it only
+  // lands the next time a tab is actually created, and in the steady state
+  // (everything already grouped) that never happens: Chrome would keep showing
+  // the old title and colour indefinitely while the popup reported the new one.
+  if (('groupTitle' in allowed || 'groupColor' in allowed) && settings.groupId !== null) {
+    try {
+      await chrome.tabGroups.update(settings.groupId, {
+        title: settings.groupTitle,
+        color: settings.groupColor,
+      });
+    } catch {
+      // Group was closed since we saved its id; forget it so the next open
+      // creates a fresh one instead of failing again.
+      await writeSettings({ groupId: null });
+    }
+  }
+
   return { settings: publicSettings(settings), group: await safeGroupState(settings) };
 }
 
