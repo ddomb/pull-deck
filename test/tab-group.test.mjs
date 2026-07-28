@@ -273,7 +273,7 @@ test('a failed create is excluded from opened and reported as not ok', async () 
   assert.equal(result.failures.length, 1);
   assert.equal(result.failures[0].id, 'pr2');
 
-  const tabEvents = events.filter((e) => e.type === 'tab');
+  const tabEvents = events.filter((e) => e.kind === 'tab');
   assert.deepEqual(
     tabEvents.map((e) => [e.id, e.ok]),
     [
@@ -290,13 +290,31 @@ test('progress reports a start event and counts up to the total', async () => {
   const events = [];
   await openIntoGroup({ ...base, pullRequests: FIVE, onProgress: (e) => events.push(e) });
 
-  assert.equal(events[0].type, 'start');
+  assert.equal(events[0].kind, 'start');
   assert.equal(events[0].total, 5);
   assert.deepEqual(
-    events.filter((e) => e.type === 'tab').map((e) => e.done),
+    events.filter((e) => e.kind === 'tab').map((e) => e.done),
     [1, 2, 3, 4, 5]
   );
-  assert.equal(events.at(-1).type, 'done');
+  assert.equal(events.at(-1).kind, 'done');
+});
+
+test('progress events survive being wrapped in a {type:"progress"} envelope', async () => {
+  // Both consumers forward these as {type:'progress', ...event}. When the event
+  // carried its own `type`, the spread overwrote the discriminator and every
+  // listener that filtered on type==='progress' silently dropped the lot — the
+  // popup showed "Opening 0 of 5…" until the whole run finished.
+  fakeChrome({ groups: [GROUP] });
+  const events = [];
+  await openIntoGroup({ ...base, pullRequests: FIVE, onProgress: (e) => events.push(e) });
+
+  assert.ok(events.length > 0);
+  for (const event of events) {
+    assert.equal(event.type, undefined, 'events must not carry a `type` key');
+    const wrapped = { type: 'progress', ...event };
+    assert.equal(wrapped.type, 'progress', 'the envelope must survive the spread');
+    assert.ok(wrapped.kind, 'and the event kind must still be readable');
+  }
 });
 
 test('tabIdByPr lets a caller focus a pull request without re-querying by url', async () => {

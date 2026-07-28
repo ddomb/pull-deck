@@ -129,7 +129,10 @@ export async function openIntoGroup({
   }
 
   const total = missing.length;
-  onProgress({ type: 'start', total, skipped: skipped.length });
+  // `kind`, not `type`: consumers wrap these as {type:'progress', ...event},
+  // and a `type` here would overwrite that discriminator and silently strand
+  // every progress update.
+  onProgress({ kind: 'start', total, skipped: skipped.length });
 
   if (total === 0) {
     return {
@@ -176,7 +179,7 @@ export async function openIntoGroup({
       failures.push({ id: pr.id, message: String(error?.message ?? error) });
     }
     done++;
-    onProgress({ type: 'tab', done, total, id: pr.id, ok });
+    onProgress({ kind: 'tab', done, total, id: pr.id, ok });
   }
 
   let groupId = group?.id ?? null;
@@ -193,7 +196,7 @@ export async function openIntoGroup({
     await chrome.tabGroups.update(groupId, { title, color });
   }
 
-  onProgress({ type: 'done', created: tabIds.length - adopted, adopted, groupId });
+  onProgress({ kind: 'done', created: tabIds.length - adopted, adopted, groupId });
 
   return {
     created: tabIds.length - adopted,

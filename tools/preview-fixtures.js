@@ -174,13 +174,21 @@
       if (message.type === 'openAll' || message.type === 'openOne') {
         const list = message.pullRequests ?? [message.pullRequest];
         const total = list.length;
+        // Mirrors exactly what app-state.js forwards, envelope and all.
         progressHandler({ type: 'progress', kind: 'start', total, done: 0 });
         const opened = [];
         for (let i = 0; i < total; i++) {
           await sleep(260);
           opened.push(list[i].id);
           groupKeys.add(`stub-${list[i].id}`);
-          progressHandler({ type: 'progress', done: i + 1, total, id: list[i].id, ok: true });
+          progressHandler({
+            type: 'progress',
+            kind: 'tab',
+            done: i + 1,
+            total,
+            id: list[i].id,
+            ok: true,
+          });
         }
         await sleep(180);
         return {

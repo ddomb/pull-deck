@@ -7,6 +7,10 @@
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "icons": "node tools/make-icons.mjs",
-    "preview": "node tools/make-preview.mjs && python3 -m http.server 8731 --bind 127.0.0.1"
+    "preview": "node tools/make-preview.mjs && python3 -m http.server 8731 --bind 127.0.0.1",
+    "mac:build": "cd macos && ./build-app.sh release",
+    "mac:test": "cd macos && swift run pulldeck-selftest && cd .. && node macos/tools/relay-roundtrip.mjs",
+    "mac:live": "node macos/tools/live-app-check.mjs",
+    "test:all": "npm test && npm run mac:test"
   }
 }

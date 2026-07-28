@@ -113,6 +113,42 @@ src/icons.js           The 16px icon set
 
 `popup.js` never calls `fetch` or the tab APIs. Chrome destroys a popup the moment focus leaves it, and `chrome.tabs.create` can take focus, so a create-then-group sequence started in the popup would strand itself with tabs opened but never grouped. The service worker owns the whole operation and reports progress back to the popup if it is still alive.
 
+## The macOS menu bar app
+
+`macos/` holds a native menu bar app that drives this extension. The extension keeps working entirely on its own — the app is an additional client, not a replacement.
+
+**Why it needs the extension at all.** A native macOS app cannot create Chrome tab groups. Chrome's scripting dictionary exposes `application`, `window`, `tab`, `bookmark folder` and `bookmark item` — there is no tab group class, and `tab` exposes only `id`, `title`, `URL` and `loading`. Edge ships the identical dictionary; Safari's has only `tab`. Tab groups exist solely behind `chrome.tabGroups`, inside the extension sandbox. So the app asks the extension to do it.
+
+**The app holds no secrets and knows no URLs.** It has no GitHub token, no GitHub client, and no copy of the pull-request identity rule. It names a scope (`mine` / `reviewing` / `assigned`); the extension resolves that against its own cache and calls the same `openIntoGroup()` the popup uses. See [BRIDGE.md](BRIDGE.md) for the protocol and the reasoning.
+
+### Build and install
+
+```bash
+npm run mac:build
+```
+
+Then register the relay with Chrome, using the extension id from `chrome://extensions`:
+
+```bash
+cd macos && ./install-host.sh <extension-id>
+```
+
+Open `macos/build/Pull Deck.app` and reload the extension. It reconnects on its own — within 30 seconds if it had already backed off. Add the app to Login Items to have it start with the Mac.
+
+`./install-host.sh <extension-id> edge` targets Edge instead. Brave uses a different directory that has no official documentation, so it is not wired up.
+
+Requires macOS 13+ (`MenuBarExtra`). Builds with Command Line Tools; full Xcode is not needed.
+
+### Tests
+
+```bash
+npm run test:all     # extension + macOS
+npm run mac:test     # Swift assertions, then a real round trip through the relay binary
+npm run mac:live     # impersonates Chrome against the running app
+```
+
+`mac:live` spawns the actual relay with Chrome's argv and stdio framing and talks to whatever app is listening, so it exercises the live app process, the real socket, and real JSON decoding. The only simulated part is Chrome itself.
+
 ## Limitations
 
 - `api.github.com` only. No GitHub Enterprise Server.

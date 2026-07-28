@@ -1,5 +1,9 @@
 # Generated dev-only preview harness (regenerate with: npm run preview)
 .claude/tmp/
 
+# Swift build products
+macos/.build/
+macos/build/
+
 .DS_Store
 node_modules/
