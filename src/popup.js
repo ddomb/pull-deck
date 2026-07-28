@@ -57,6 +57,7 @@ const dom = {
   emptyNotice: $('empty-notice'),
   errorNotice: $('error-notice'),
   openAll: $('open-all'),
+  openAllLabel: null, // set in wire(): the flex row holding the check + text
   openAllText: $('open-all-text'),
   dockNote: $('dock-note'),
   settings: $('settings'),
@@ -310,6 +311,8 @@ function renderDock() {
 
   dom.openAll.dataset.state = 'idle';
   dom.openAll.style.setProperty('--progress', '0');
+  // Drop the success check if we are coming back from the done state.
+  dom.openAllLabel.replaceChildren(dom.openAllText);
   dom.openAll.disabled = todo.length === 0;
   dom.openAllText.textContent =
     todo.length === 0
@@ -538,6 +541,7 @@ async function openAll() {
   button.dataset.state = 'working';
   button.disabled = true;
   button.style.setProperty('--progress', '0');
+  dom.openAllLabel.replaceChildren(dom.openAllText);
   dom.openAllText.textContent = `Opening 0 of ${todo.length}…`;
   dom.dockNote.removeAttribute('data-tone');
   dom.dockNote.textContent = '';
@@ -559,7 +563,11 @@ async function openAll() {
     const added = result.created + result.adopted;
     button.style.setProperty('--progress', '1');
     button.dataset.state = 'done';
-    dom.openAllText.replaceChildren(glyphCheck(), document.createTextNode(`Added ${added}`));
+    dom.openAllText.textContent = `Added ${added}`;
+    // Sibling of the text span, not a child of it: #open-all-text is
+    // nowrap/ellipsis, and a display:block svg inside it forces a line break
+    // that stacks the check on top of its own label.
+    dom.openAllLabel.replaceChildren(glyphCheck(), dom.openAllText);
 
     if (result.failures.length > 0) {
       dom.dockNote.dataset.tone = 'danger';
@@ -671,6 +679,7 @@ function switchScope(scope) {
 }
 
 function wire() {
+  dom.openAllLabel = dom.openAll.querySelector('.primary-label');
   setIcon(dom.refresh, icons.refresh);
   setIcon(dom.openSettings, icons.settings);
   setIcon(dom.closeSettings, icons.back);

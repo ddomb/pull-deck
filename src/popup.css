@@ -26,10 +26,20 @@
 
   --text: oklch(23% 0.014 190);
   --text-secondary: oklch(46% 0.013 190);
-  --text-tertiary: oklch(55.5% 0.012 190);
+  /* Pinned by the worst pairing, which is --bg (4.51:1), not --surface. */
+  --text-tertiary: oklch(54.3% 0.012 190);
 
   --hairline-color: oklch(87% 0.007 190);
-  --border-strong: oklch(80% 0.009 190);
+  /* Input and control borders are UI, so 3:1 against --surface, not decorative. */
+  --border-strong: oklch(66.4% 0.009 190);
+  /* An off switch has to be findable on its own panel. Filling the track to
+     3:1 would make it far heavier than a real macOS switch, so the track stays
+     light and its *boundary* carries the 3:1, which is what WCAG 1.4.11 asks
+     for. */
+  --switch-track: oklch(89% 0.008 190);
+  --switch-edge: oklch(64% 0.012 190);
+  --switch-knob-shadow: 0 1px 3px oklch(23% 0.014 190 / 0.24);
+  --swatch-ring: oklch(23% 0.014 190 / 0.14);
 
   /* Semantics. Never the only signal: every one is paired with a glyph and a
      word, so hue 150 vs hue 190 never has to carry meaning by itself. */
@@ -93,9 +103,13 @@
   :root {
     /* Dark is designed, not inverted: depth comes from surface lightness,
        accents desaturate slightly, body weight drops a step. */
-    --accent: oklch(54% 0.125 190);
-    --accent-hover: oklch(59% 0.128 190);
-    --accent-active: oklch(49% 0.12 191);
+    /* Boxed in from three sides: the button label needs 4.5:1 against this
+       (L <= 53.2%), and it must hold 3:1 against --accent-quiet (L >= 51.4%)
+       for the in-group check. Hover therefore darkens rather than lightens;
+       there is no lighter value that keeps the label readable. */
+    --accent: oklch(52.5% 0.125 190);
+    --accent-hover: oklch(49.5% 0.128 190);
+    --accent-active: oklch(45.5% 0.12 191);
     --accent-quiet: oklch(26.5% 0.03 190);
     --accent-text: oklch(78% 0.098 190);
     --on-accent: oklch(99% 0.005 190);
@@ -109,10 +123,16 @@
 
     --text: oklch(96% 0.004 190);
     --text-secondary: oklch(72.5% 0.011 190);
-    --text-tertiary: oklch(61% 0.012 190);
+    /* Pinned by --accent-quiet (the in-group row tint), which is a harder
+       background here than either --surface or --bg. */
+    --text-tertiary: oklch(64% 0.012 190);
 
     --hairline-color: oklch(31% 0.011 190);
-    --border-strong: oklch(40% 0.012 190);
+    --border-strong: oklch(51.2% 0.012 190);
+    --switch-track: oklch(33% 0.012 190);
+    --switch-edge: oklch(58% 0.012 190);
+    --switch-knob-shadow: none;
+    --swatch-ring: oklch(99% 0.004 190 / 0.18);
 
     --success: oklch(74% 0.14 152);
     --success-quiet: oklch(28% 0.045 152);
@@ -121,8 +141,8 @@
     --pending: oklch(78% 0.13 82);
     --pending-quiet: oklch(29% 0.05 82);
 
-    --shadow-sm: 0 0 0 var(--hairline) oklch(100% 0 0 / 0.05);
-    --shadow-md: 0 0 0 var(--hairline) oklch(100% 0 0 / 0.07);
+    --shadow-sm: 0 0 0 var(--hairline) oklch(99% 0.004 190 / 0.05);
+    --shadow-md: 0 0 0 var(--hairline) oklch(99% 0.004 190 / 0.07);
     --shadow-accent: none;
   }
 }
@@ -176,12 +196,16 @@ button:focus {
   outline: none;
 }
 
+/* No border-radius here. This rule is specificity (0,1,1) and every component
+   class is (0,1,0), so setting a radius would reshape each control the moment
+   it is keyboard-focused: circular swatches would square off and the switch
+   track would stop being a pill. The ring already follows the element's own
+   radius. */
 button:focus-visible,
 input:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: var(--radius-sm);
 }
 
 h1,
@@ -298,11 +322,20 @@ svg {
   letter-spacing: -0.019em;
 }
 
+.brand-text {
+  min-width: 0;
+}
+
+/* A 39-character login fits on SF Pro but wraps on the wider Windows fallback,
+   which would push the two-line brand stack past the 52px toolbar. */
 .brand-user {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
   letter-spacing: -0.006em;
   padding-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .toolbar-actions {
@@ -324,11 +357,14 @@ svg {
     transform var(--dur-instant) var(--ease-out-quart);
 }
 
-/* 28px is the visual size; the tap target is expanded to 44px. */
+/* 28px is the visual size; the tap target is expanded vertically to 44px.
+   Horizontally it may not exceed half the 2px gap between buttons, or the
+   later-painted neighbour wins hit-testing over the previous button's own
+   visible glyph and the wrong action fires. */
 .icon-btn::before {
   content: '';
   position: absolute;
-  inset: -8px;
+  inset: -8px -1px;
 }
 
 .icon-btn:hover {
@@ -539,6 +575,20 @@ svg {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
   border-radius: 0;
+  /* Keep the focused row clear of the bottom scroll fade, which would
+     otherwise render the ring's lower edge at alpha 0 (WCAG 2.4.11). */
+  scroll-margin-bottom: 38px;
+  scroll-margin-top: 4px;
+}
+
+/* The group clips to a 12px radius, so a square ring loses its outer corners
+   on the first and last row. */
+li:first-child .pr-row:focus-visible {
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+li:last-child .pr-row:focus-visible {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 /* In-group rows get a tint *and* a glyph. Never tint alone. */
@@ -563,11 +613,16 @@ svg {
   overflow: hidden;
 }
 
+/* Deliberately nowrap. Wrapping put the separator pseudo-element at the start
+   of the second line, so a long repo name produced an orphaned "· +128 −98".
+   The repo shrinks to an ellipsis instead; it is the least load-bearing part
+   of the line. */
 .pr-meta {
   grid-column: 1;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow: hidden;
   gap: 0 var(--space-xs);
   margin-top: 3px;
   font-size: var(--text-xs);
@@ -579,9 +634,15 @@ svg {
 .pr-repo {
   font-weight: 500;
   color: var(--text-secondary);
-  max-width: 190px;
+  flex: 0 1 auto;
+  min-width: 4ch;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pr-dot {
+  flex: none;
   white-space: nowrap;
 }
 
@@ -870,7 +931,10 @@ svg {
   inset: 0;
   transform-origin: left center;
   transform: scaleX(var(--progress, 0));
-  background: oklch(100% 0 0 / 0.22);
+  /* A tinted dark scrim, not a white wash. Lightening the accent under a
+     near-white label dropped it to 3.1:1 across the swept half, so the label
+     had two different contrast ratios at once mid-animation. */
+  background: oklch(23% 0.014 190 / 0.28);
   transition: transform var(--dur-base) var(--ease-out-quart);
   pointer-events: none;
 }
@@ -976,10 +1040,13 @@ input::placeholder {
   font-family: var(--font);
 }
 
+/* Deliberately no `outline: none` here. It would sit later in the file at equal
+   specificity to the :focus-visible ring above and silently cancel it, leaving
+   a 0.5px border colour change and a 1.06:1 halo as the entire focus
+   affordance on the token field. */
 input:focus {
-  outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-quiet);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 72%);
 }
 
 .field[data-invalid] input {
@@ -1172,7 +1239,7 @@ input:focus {
   height: 26px;
   border-radius: var(--radius-pill);
   background: var(--swatch);
-  box-shadow: inset 0 0 0 var(--hairline) oklch(23% 0.014 190 / 0.14);
+  box-shadow: inset 0 0 0 var(--hairline) var(--swatch-ring);
   transition: transform var(--dur-fast) var(--ease-out-quart);
 }
 
@@ -1214,9 +1281,10 @@ input:focus {
   width: 40px;
   height: 24px;
   border-radius: var(--radius-pill);
-  background: var(--surface-sunken);
-  box-shadow: inset 0 0 0 var(--hairline) var(--hairline-color);
-  transition: background var(--dur-base) var(--ease-out-quart);
+  background: var(--switch-track);
+  box-shadow: inset 0 0 0 1px var(--switch-edge);
+  transition: background var(--dur-base) var(--ease-out-quart),
+    box-shadow var(--dur-base) var(--ease-out-quart);
 }
 
 .switch[aria-checked='true'] {
@@ -1233,7 +1301,7 @@ input:focus {
   height: 20px;
   border-radius: var(--radius-pill);
   background: oklch(99.5% 0.002 190);
-  box-shadow: 0 1px 3px oklch(23% 0.014 190 / 0.24);
+  box-shadow: var(--switch-knob-shadow);
   transition: transform var(--dur-base) var(--ease-out-quart);
 }
 
@@ -1327,14 +1395,36 @@ kbd {
 /* ==================================================== reduced motion ==== */
 
 @media (prefers-reduced-motion: reduce) {
-  /* Spatial movement goes; the progress fill stays, because it carries
-     information rather than decoration. */
+  /* The property list is load-bearing. `transition-duration` alone leaves
+     `transition-property` at its default of `all`, which hands a 140ms
+     transition to every element that previously had none (body, .pr-group,
+     everything) and leaves each existing `transform` transition running, just
+     faster. Naming the properties keeps colour and opacity crossfading while
+     every movement snaps: the segment pill and the switch knob still travel to
+     their new state, they just no longer slide there. */
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    transition-property: opacity, color, background-color, border-color,
+      box-shadow, visibility !important;
     transition-duration: 140ms !important;
+  }
+
+  /* Purely decorative movement is removed outright, not merely shortened. */
+  .icon-btn:active,
+  .primary:active,
+  .swatch:hover,
+  .view {
+    transform: none !important;
+  }
+
+  /* The one exception: the progress fill reports how many tabs have actually
+     opened, so it is information and keeps moving. */
+  .primary-fill {
+    transition-property: transform !important;
+    transition-duration: 200ms !important;
   }
 
   /* !important is needed to beat the blanket 0.01ms rule above; a crossfade
@@ -1358,10 +1448,6 @@ kbd {
   .settings[data-open] {
     opacity: 1;
     transition: opacity 140ms var(--ease-out-quart), visibility 0s;
-  }
-
-  .primary-fill {
-    transition-duration: 200ms !important;
   }
 
   @keyframes fade-in {

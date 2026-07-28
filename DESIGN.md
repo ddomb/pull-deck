@@ -33,7 +33,11 @@ That scene forces **both themes, driven by the system**, not a choice between th
 
 **Accent: teal, `oklch(… 0.12 190)`.** Chosen against the reflexes: not Primer green (145), not Linear violet (295), not system blue (255). Hue 190 also sits clear of every semantic hue in use, so the accent never reads as a status.
 
-Neutrals are tinted toward 190 at chroma `0.004–0.010` — enough for cohesion, below the threshold of looking colored. No `#000`, no `#fff`, no pure gray anywhere.
+Neutrals are tinted toward 190 at chroma `0.004–0.010` — enough for cohesion, below the threshold of looking colored. No `#000`, no `#fff`, no pure gray anywhere, including inside shadow and overlay colors.
+
+**Dark-mode accent is boxed in from three sides** and the value is not free: the button label needs 4.5:1 against it (L ≤ 53.2%), and it must hold 3:1 against `--accent-quiet` for the in-group check (L ≥ 51.4%). `oklch(52.5% 0.125 190)` is inside that window. There is no *lighter* value that keeps the label readable, so dark-mode hover darkens instead of lightening — the one place this design inverts the usual convention, and it is forced rather than chosen.
+
+Two related consequences, both measured rather than assumed. The progress fill is a **tinted dark scrim**, not a white wash: lightening the accent under a near-white label dropped it to 3.1:1 across the swept half, so the label had two different contrast ratios at once mid-animation. And the switch's off-state track stays light, with its **boundary** carrying the 3:1 rather than its fill — filling the track to 3:1 would make it far heavier than any real macOS switch, and WCAG 1.4.11 asks for a discernible boundary, not a dark one.
 
 Semantic hues: success 150, danger 25, pending 75.
 
@@ -67,7 +71,9 @@ Product timings: 150–250ms for nearly everything. `--ease-out-quart` is the de
 
 Supporting layer: rows enter on a 26ms stagger capped at 10 items, 240ms, fade plus 6px rise. The segmented indicator slides. View changes crossfade. Skeletons shimmer via `background-position`.
 
-Nothing animates `width`, `height`, `top`, `left`, or margins. `prefers-reduced-motion: reduce` drops every spatial transform to a 140ms crossfade and freezes the shimmer, while keeping the progress fill — that one is functional information, not decoration.
+Nothing animates `width`, `height`, `top`, `left`, or margins.
+
+Under `prefers-reduced-motion: reduce` the blanket rule **names its transition properties** (opacity, colour, border, shadow, visibility) rather than only shortening the duration. Leaving `transition-property` at its default of `all` does two wrong things at once: it hands a 140ms transition to every element that previously had none, and it leaves every existing `transform` transition running, merely faster. With the properties named, colour and opacity still crossfade while all movement snaps — the segment pill and the switch knob still travel to their new state, they just no longer slide there. Decorative transforms (press scale, hover scale, the view's 4px rise) are removed outright. The progress fill is the single exception and keeps its `scaleX`, because it reports how many tabs have actually opened.
 
 ## Component states
 
