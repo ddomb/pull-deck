@@ -1,0 +1,12 @@
+{
+  "name": "pull-deck",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chromium extension: your open GitHub pull requests, opened into one tab group without duplicates.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "icons": "node tools/make-icons.mjs",
+    "preview": "node tools/make-preview.mjs && python3 -m http.server 8731 --bind 127.0.0.1"
+  }
+}

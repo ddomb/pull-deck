@@ -1,0 +1,5 @@
+# Generated dev-only preview harness (regenerate with: npm run preview)
+.claude/tmp/
+
+.DS_Store
+node_modules/

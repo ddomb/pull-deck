@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Pull Deck</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="app" id="app" data-view="loading">
+      <header class="toolbar">
+        <div class="brand">
+          <img class="brand-mark" src="../icons/icon48.png" alt="" width="22" height="22" />
+          <div>
+            <div class="brand-name">Pull Deck</div>
+            <div class="brand-user" id="brand-user"></div>
+          </div>
+        </div>
+        <div class="toolbar-actions">
+          <button class="icon-btn" id="refresh" type="button" title="Refresh (⌘R)">
+            <span class="visually-hidden">Refresh</span>
+          </button>
+          <button class="icon-btn" id="open-settings" type="button" title="Settings">
+            <span class="visually-hidden">Settings</span>
+          </button>
+        </div>
+      </header>
+
+      <nav class="segments" id="segments" role="tablist" aria-label="Pull request scope">
+        <div class="segments-indicator" id="segments-indicator"></div>
+        <button class="segment" type="button" role="tab" data-scope="mine" aria-selected="true">
+          Mine <span class="segment-count" data-count="mine"></span>
+        </button>
+        <button class="segment" type="button" role="tab" data-scope="reviewing" aria-selected="false" tabindex="-1">
+          Reviews <span class="segment-count" data-count="reviewing"></span>
+        </button>
+        <button class="segment" type="button" role="tab" data-scope="assigned" aria-selected="false" tabindex="-1">
+          Assigned <span class="segment-count" data-count="assigned"></span>
+        </button>
+      </nav>
+
+      <main class="stage" id="stage">
+        <section class="view" data-name="loading" aria-label="Loading pull requests" data-active>
+          <div class="skeleton-group" id="skeleton"></div>
+        </section>
+
+        <section class="view" data-name="list">
+          <ul class="pr-group" id="pr-list" aria-label="Open pull requests"></ul>
+        </section>
+
+        <section class="view" data-name="empty">
+          <div class="notice" id="empty-notice"></div>
+        </section>
+
+        <section class="view" data-name="error">
+          <div class="notice" id="error-notice"></div>
+        </section>
+
+        <section class="view" data-name="onboarding">
+          <form class="onboard" id="token-form" novalidate>
+            <div class="onboard-head">
+              <h2>Connect GitHub</h2>
+              <p class="onboard-sub">
+                Pull Deck reads your open pull requests and puts them in one tab group.
+                It needs a personal access token to do that.
+              </p>
+            </div>
+
+            <div class="field" id="token-field">
+              <label class="field-label" for="token-input">Personal access token</label>
+              <div class="field-input-wrap">
+                <input
+                  id="token-input"
+                  name="token"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="ghp_… or github_pat_…"
+                  aria-describedby="token-help"
+                />
+                <button class="field-reveal" id="token-reveal" type="button" aria-pressed="false">
+                  <span class="visually-hidden">Show token</span>
+                </button>
+              </div>
+              <p class="field-error" id="token-error" role="alert"></p>
+              <p class="field-help" id="token-help">
+                Stored in this browser profile only, and sent nowhere except
+                <code>api.github.com</code>. It is not encrypted, so revoke it on GitHub if
+                this profile is shared.
+              </p>
+            </div>
+
+            <div class="field">
+              <span class="field-label">Scopes it needs</span>
+              <div class="scopes">
+                <span class="scope">repo</span>
+                <span class="scope">read:org</span>
+              </div>
+              <p class="field-help">
+                <a id="token-link" href="#" target="_blank" rel="noreferrer noopener"
+                  >Create a classic token with these scopes</a
+                >. Fine-grained tokens are scoped per repository, so they tend to miss
+                pull requests in orgs they were not granted.
+              </p>
+            </div>
+
+            <button class="primary" id="connect" type="submit" data-state="idle">
+              <span class="primary-fill"></span>
+              <span class="primary-label"><span>Connect</span></span>
+            </button>
+          </form>
+        </section>
+      </main>
+
+      <footer class="dock">
+        <button class="primary" id="open-all" type="button" data-state="idle" disabled>
+          <span class="primary-fill"></span>
+          <span class="primary-label"><span id="open-all-text">Open in group</span></span>
+        </button>
+        <p class="dock-note" id="dock-note" aria-live="polite"></p>
+      </footer>
+
+      <section class="settings" id="settings" aria-label="Settings" aria-hidden="true">
+        <header class="settings-head">
+          <button class="icon-btn" id="close-settings" type="button">
+            <span class="visually-hidden">Back</span>
+          </button>
+          <h2>Settings</h2>
+        </header>
+        <div class="settings-body">
+          <div class="setting-block">
+            <span class="setting-legend">Tab group</span>
+            <div class="field">
+              <label class="field-label" for="group-name">Name</label>
+              <input id="group-name" type="text" value="Pull Requests" maxlength="40" />
+            </div>
+            <div class="swatches" id="swatches" role="group" aria-label="Group colour"></div>
+          </div>
+
+          <div class="setting-block">
+            <span class="setting-legend">Toolbar</span>
+            <div class="switch-row">
+              <div class="switch-copy">
+                <span class="switch-title">Badge count</span>
+                <span class="switch-help"
+                  >Check every 15 minutes and count every open pull request across all
+                  three lists.</span
+                >
+              </div>
+              <button class="switch" id="badge-switch" type="button" role="switch" aria-checked="true">
+                <span class="visually-hidden">Badge count</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-block">
+            <span class="setting-legend">Token</span>
+            <div class="token-summary">
+              <span id="token-icon"></span>
+              <span id="token-owner">Not connected</span>
+              <span class="token-fingerprint" id="token-fingerprint"></span>
+            </div>
+            <button class="danger-link" id="forget-token" type="button">
+              Forget this token
+            </button>
+          </div>
+
+          <div class="setting-block">
+            <span class="setting-legend">Shortcuts</span>
+            <div class="hint-row">
+              <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
+              <span><kbd>↵</kbd> open</span>
+              <span><kbd>⌘</kbd><kbd>↵</kbd> open all</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
