@@ -1,21 +1,30 @@
-// All network and tab work happens here, never in the popup.
+// Wiring only. The work lives in app-state.js, which both the popup and the
+// macOS menu bar app reach through — the popup over chrome.runtime messaging,
+// the app over the native messaging bridge.
 //
-// The popup is a document that Chrome destroys the instant focus leaves it, and
-// there is "no way to keep the popup open after the user has clicked away". A
-// create-tabs-then-group sequence started in the popup would strand itself
-// half-finished. So the popup only ever sends one message and renders whatever
-// comes back.
+// Nothing here runs in the popup. Chrome destroys a popup document the instant
+// focus leaves it, and there is "no way to keep the popup open after the user
+// has clicked away", so a create-tabs-then-group sequence started there would
+// strand itself half-finished.
 
-import { fetchPullRequests, mergeScopes, GitHubError } from './github.js';
-import { openIntoGroup, readGroupState } from './tab-group.js';
+import { fetchPullRequests, GitHubError } from './github.js';
 import { readSettings, writeSettings } from './store.js';
+import {
+  loadState,
+  connect,
+  applySettings,
+  openAll,
+  openOne,
+  refreshBadge,
+  onProgress,
+  serializeError,
+} from './app-state.js';
+import { ensureBridge, isReconnectAlarm, reconnect, pushState } from './bridge.js';
 
-const ALARM = 'pull-deck-refresh';
+const REFRESH_ALARM = 'pull-deck-refresh';
 const REFRESH_MINUTES = 15;
-const CACHE_TTL_MS = 60_000;
-const BADGE_BG = '#1d7f8c';
 
-// ------------------------------------------------------------------ messages
+/* --------------------------------------------------------- popup messaging */
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   handle(message).then(
@@ -42,181 +51,35 @@ async function handle(message) {
   }
 }
 
-// -------------------------------------------------------------------- state
-
-/** Everything the popup needs for a full render, in one round trip. */
-async function loadState({ force }) {
-  const settings = await readSettings();
-  if (!settings.token) {
-    return { stage: 'onboarding', settings: publicSettings(settings) };
-  }
-
-  let cache = settings.cache;
-  const stale = !cache || Date.now() - cache.fetchedAt > CACHE_TTL_MS;
-  // Surface whatever the background refresh last hit, so a token revoked
-  // hours ago is explained rather than just showing a stale list.
-  let error = settings.lastError ?? null;
-
-  if (force || stale) {
-    try {
-      cache = await fetchPullRequests(settings.token);
-      await writeSettings({ cache, lastError: null });
-      await refreshBadge(cache, settings);
-      error = null; // a good fetch clears whatever the last background one hit
-    } catch (caught) {
-      error = serializeError(caught);
-      await writeSettings({ lastError: error });
-      // A cached list is still worth showing next to a transient failure.
-      if (!cache) return { stage: 'error', error, settings: publicSettings(settings) };
-    }
-  }
-
-  const group = await safeGroupState(settings);
-
-  return {
-    stage: 'list',
-    settings: publicSettings(settings),
-    viewer: cache.viewer,
-    scopes: cache.scopes,
-    rateLimit: cache.rateLimit,
-    fetchedAt: cache.fetchedAt,
-    group,
-    error,
-  };
-}
-
-async function connect(token) {
-  const trimmed = String(token ?? '').trim();
-  if (!trimmed) throw new GitHubError('badToken', 'Paste a token first.');
-
-  // Validating and loading are the same request: no separate /user round trip.
-  const cache = await fetchPullRequests(trimmed);
-  await writeSettings({ token: trimmed, cache, lastError: null });
-  const settings = await readSettings();
-  await refreshBadge(cache, settings);
-
-  return {
-    stage: 'list',
-    settings: publicSettings(settings),
-    viewer: cache.viewer,
-    scopes: cache.scopes,
-    rateLimit: cache.rateLimit,
-    fetchedAt: cache.fetchedAt,
-    group: await safeGroupState(settings),
-    error: null,
-  };
-}
-
-async function applySettings(patch) {
-  const allowed = {};
-  if (typeof patch.groupTitle === 'string') allowed.groupTitle = patch.groupTitle.trim().slice(0, 40);
-  if (typeof patch.groupColor === 'string') allowed.groupColor = patch.groupColor;
-  if (typeof patch.badgeEnabled === 'boolean') allowed.badgeEnabled = patch.badgeEnabled;
-  if (patch.token === null) {
-    await chrome.storage.local.remove(['token', 'cache', 'lastError']);
-    await chrome.action.setBadgeText({ text: '' });
-    return { stage: 'onboarding', settings: publicSettings(await readSettings()) };
-  }
-
-  await writeSettings(allowed);
-  const settings = await readSettings();
-  if ('badgeEnabled' in allowed) await refreshBadge(settings.cache, settings);
-
-  // Push a rename or recolour straight to the live group. Otherwise it only
-  // lands the next time a tab is actually created, and in the steady state
-  // (everything already grouped) that never happens: Chrome would keep showing
-  // the old title and colour indefinitely while the popup reported the new one.
-  if (('groupTitle' in allowed || 'groupColor' in allowed) && settings.groupId !== null) {
-    try {
-      await chrome.tabGroups.update(settings.groupId, {
-        title: settings.groupTitle,
-        color: settings.groupColor,
-      });
-    } catch {
-      // Group was closed since we saved its id; forget it so the next open
-      // creates a fresh one instead of failing again.
-      await writeSettings({ groupId: null });
-    }
-  }
-
-  return { settings: publicSettings(settings), group: await safeGroupState(settings) };
-}
-
-// ------------------------------------------------------------------ opening
-
-async function openAll(pullRequests) {
-  const settings = await readSettings();
-  const result = await openIntoGroup({
-    pullRequests,
-    title: settings.groupTitle,
-    color: settings.groupColor,
-    savedGroupId: settings.groupId,
-    onProgress: emit,
-  });
-
-  if (result.groupId !== null && result.groupId !== settings.groupId) {
-    await writeSettings({ groupId: result.groupId });
-  }
-  return result;
-}
-
-async function openOne(pullRequest) {
-  if (!pullRequest?.url) throw new Error('No pull request given.');
-  const result = await openAll([pullRequest]);
-
-  // Focus by tab id, not by re-querying the URL: a tab created a moment ago
-  // often still reports an empty `url` (the destination sits in `pendingUrl`
-  // until navigation commits), so a URL query would find nothing and the click
-  // would appear to do nothing at all.
-  const tabId = result.tabIdByPr?.[pullRequest.id];
-  if (typeof tabId === 'number') {
-    try {
-      const tab = await chrome.tabs.update(tabId, { active: true });
-      if (tab?.windowId !== undefined) {
-        await chrome.windows.update(tab.windowId, { focused: true });
-      }
-    } catch {
-      // Tab vanished between creating and focusing it. The grouping still held.
-    }
-  }
-  return result;
-}
-
-/** Progress for a popup that may or may not still be alive. */
-function emit(event) {
-  chrome.runtime.sendMessage({ type: 'progress', ...event }).catch(() => {
-    // No popup listening. Expected, and not a problem: the work continues here.
-  });
-}
-
-// -------------------------------------------------------------------- badge
-
-async function refreshBadge(cache, settings) {
-  if (!settings.badgeEnabled || !cache) {
-    await chrome.action.setBadgeText({ text: '' });
-    return;
-  }
-  const count = mergeScopes(cache.scopes).length;
-  await chrome.action.setBadgeBackgroundColor({ color: BADGE_BG });
-  await chrome.action.setBadgeText({ text: count > 0 ? String(count) : '' });
-}
-
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create(ALARM, { periodInMinutes: REFRESH_MINUTES });
+// Progress goes to the popup if one is still open. Not being open is the
+// normal case, not an error — the work continues in here either way.
+onProgress((event) => {
+  chrome.runtime.sendMessage({ type: 'progress', ...event }).catch(() => {});
 });
 
-chrome.runtime.onStartup.addListener(() => {
-  chrome.alarms.create(ALARM, { periodInMinutes: REFRESH_MINUTES });
-});
+/* ------------------------------------------------------------------ alarms */
+
+function scheduleRefresh() {
+  chrome.alarms.create(REFRESH_ALARM, { periodInMinutes: REFRESH_MINUTES });
+}
+
+chrome.runtime.onInstalled.addListener(scheduleRefresh);
+chrome.runtime.onStartup.addListener(scheduleRefresh);
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name !== ALARM) return;
+  if (isReconnectAlarm(alarm.name)) {
+    reconnect();
+    return;
+  }
+  if (alarm.name !== REFRESH_ALARM) return;
+
   const settings = await readSettings();
   if (!settings.token || !settings.badgeEnabled) return;
   try {
     const cache = await fetchPullRequests(settings.token);
     await writeSettings({ cache, lastError: null });
     await refreshBadge(cache, settings);
+    await pushState();
   } catch (error) {
     // Surface it in the popup instead of retrying in a loop out of sight.
     await writeSettings({ lastError: serializeError(error) });
@@ -224,6 +87,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       await chrome.action.setBadgeText({ text: '!' });
       await chrome.action.setBadgeBackgroundColor({ color: '#b3261e' });
     }
+    await pushState();
   }
 });
 
@@ -233,36 +97,9 @@ chrome.tabGroups.onRemoved.addListener(async (group) => {
   if (settings.groupId === group.id) await writeSettings({ groupId: null });
 });
 
-// ------------------------------------------------------------------ helpers
+/* ------------------------------------------------------------------ bridge */
 
-async function safeGroupState(settings) {
-  try {
-    return await readGroupState({
-      savedGroupId: settings.groupId,
-      title: settings.groupTitle,
-    });
-  } catch {
-    return { groupId: null, keys: [], otherWindow: false };
-  }
-}
-
-function publicSettings(settings) {
-  return {
-    groupTitle: settings.groupTitle,
-    groupColor: settings.groupColor,
-    badgeEnabled: settings.badgeEnabled,
-    hasToken: Boolean(settings.token),
-    tokenTail: settings.token ? settings.token.slice(-4) : '',
-  };
-}
-
-function serializeError(error) {
-  if (error instanceof GitHubError) {
-    return {
-      kind: error.kind,
-      message: error.message,
-      retryAt: error.retryAt ? error.retryAt.toISOString() : null,
-    };
-  }
-  return { kind: 'unknown', message: String(error?.message ?? error), retryAt: null };
-}
+// Top level, so the bridge is re-established every time the service worker
+// spins up — whatever woke it. A missing menu bar app costs one failed spawn
+// and then backs off.
+ensureBridge();

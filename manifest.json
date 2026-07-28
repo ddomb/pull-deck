@@ -24,6 +24,6 @@
     "service_worker": "src/service-worker.js",
     "type": "module"
   },
-  "permissions": ["tabs", "tabGroups", "storage", "alarms"],
+  "permissions": ["tabs", "tabGroups", "storage", "alarms", "nativeMessaging"],
   "host_permissions": ["https://api.github.com/*"]
 }
