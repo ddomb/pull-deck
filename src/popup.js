@@ -275,7 +275,7 @@ function renderSkeleton() {
 }
 
 function renderSegments() {
-  dom.segments.style.setProperty('--seg-index', String(SCOPES.indexOf(state.scope)));
+  dom.segments.dataset.scope = state.scope;
   for (const button of dom.segments.querySelectorAll('.segment')) {
     const scope = button.dataset.scope;
     const selected = scope === state.scope;

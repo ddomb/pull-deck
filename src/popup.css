@@ -360,7 +360,6 @@ svg {
 /* =========================================================== segments ==== */
 
 .segments {
-  --seg-index: 0;
   position: relative;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -381,8 +380,20 @@ svg {
   background: var(--surface);
   border-radius: 7px;
   box-shadow: var(--shadow-sm);
-  transform: translateX(calc(var(--seg-index) * 100%));
+  transform: translateX(0%);
   transition: transform var(--dur-base) var(--ease-out-quart);
+}
+
+/* Three static positions rather than translateX(calc(var(--i) * 100%)).
+   Changing an inherited custom property on the parent does not reliably
+   invalidate a var() inside a transform on the child, and the pill silently
+   never moves. An attribute selector always invalidates. */
+.segments[data-scope='reviewing'] .segments-indicator {
+  transform: translateX(100%);
+}
+
+.segments[data-scope='assigned'] .segments-indicator {
+  transform: translateX(200%);
 }
 
 .segment {
