@@ -53,13 +53,16 @@ async function loadState({ force }) {
 
   let cache = settings.cache;
   const stale = !cache || Date.now() - cache.fetchedAt > CACHE_TTL_MS;
-  let error = null;
+  // Surface whatever the background refresh last hit, so a token revoked
+  // hours ago is explained rather than just showing a stale list.
+  let error = settings.lastError ?? null;
 
   if (force || stale) {
     try {
       cache = await fetchPullRequests(settings.token);
       await writeSettings({ cache, lastError: null });
       await refreshBadge(cache, settings);
+      error = null; // a good fetch clears whatever the last background one hit
     } catch (caught) {
       error = serializeError(caught);
       await writeSettings({ lastError: error });
@@ -144,19 +147,22 @@ async function openOne(pullRequest) {
   if (!pullRequest?.url) throw new Error('No pull request given.');
   const result = await openAll([pullRequest]);
 
-  // A single row click means "take me there", so this one does steal focus.
-  const [tab] = await chrome.tabs.query({ url: canonicalPattern(pullRequest.url) });
-  if (tab) {
-    await chrome.tabs.update(tab.id, { active: true });
-    await chrome.windows.update(tab.windowId, { focused: true });
+  // Focus by tab id, not by re-querying the URL: a tab created a moment ago
+  // often still reports an empty `url` (the destination sits in `pendingUrl`
+  // until navigation commits), so a URL query would find nothing and the click
+  // would appear to do nothing at all.
+  const tabId = result.tabIdByPr?.[pullRequest.id];
+  if (typeof tabId === 'number') {
+    try {
+      const tab = await chrome.tabs.update(tabId, { active: true });
+      if (tab?.windowId !== undefined) {
+        await chrome.windows.update(tab.windowId, { focused: true });
+      }
+    } catch {
+      // Tab vanished between creating and focusing it. The grouping still held.
+    }
   }
   return result;
-}
-
-/** Match pattern covering /pull/123 and every sub-path under it. */
-function canonicalPattern(url) {
-  const { origin, pathname } = new URL(url);
-  return `${origin}${pathname}*`;
 }
 
 /** Progress for a popup that may or may not still be alive. */

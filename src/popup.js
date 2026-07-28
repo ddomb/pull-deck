@@ -776,8 +776,9 @@ function wire() {
       dom.openAll.style.setProperty('--progress', String(message.done / message.total));
       dom.openAllText.textContent = `Opening ${message.done} of ${message.total}…`;
     }
-    // Rows flip as their tab is genuinely created, not on a timer.
-    if (message.id) markRowInGroup(message.id);
+    // Rows flip as their tab is genuinely created, not on a timer, and only
+    // when that create actually succeeded.
+    if (message.id && message.ok !== false) markRowInGroup(message.id);
   });
 }
 

@@ -90,13 +90,26 @@ export async function openIntoGroup({
     if (key && !strays.has(key)) strays.set(key, tab.id);
   }
 
+  // Which tab holds which pull request, so callers can focus one by id rather
+  // than re-querying by URL (a freshly created tab often still has an empty
+  // `url` with the destination in `pendingUrl`, so a URL query finds nothing).
+  const tabIdByPr = {};
+  const tabIdByKey = new Map();
+  for (const tab of inGroup) {
+    const key = pullRequestKey(tab.url ?? tab.pendingUrl);
+    if (key && !tabIdByKey.has(key)) tabIdByKey.set(key, tab.id);
+  }
+
   const missing = [];
   const skipped = [];
   for (const pr of pullRequests) {
     const key = pullRequestKey(pr.url);
     if (!key) continue;
-    if (present.has(key)) skipped.push(pr.id);
-    else missing.push({ ...pr, key });
+    if (present.has(key)) {
+      skipped.push(pr.id);
+      const existing = tabIdByKey.get(key);
+      if (existing !== undefined) tabIdByPr[pr.id] = existing;
+    } else missing.push({ ...pr, key });
   }
 
   const total = missing.length;
@@ -112,6 +125,7 @@ export async function openIntoGroup({
       movedWindow: false,
       opened: [],
       failures: [],
+      tabIdByPr,
     };
   }
 
@@ -122,10 +136,12 @@ export async function openIntoGroup({
   let done = 0;
 
   for (const pr of missing) {
+    let ok = true;
     try {
       const strayId = strays.get(pr.key);
       if (strayId !== undefined) {
         tabIds.push(strayId);
+        tabIdByPr[pr.id] = strayId;
         strays.delete(pr.key);
         adopted++;
       } else {
@@ -136,13 +152,15 @@ export async function openIntoGroup({
           windowId: targetWindowId,
         });
         tabIds.push(tab.id);
+        tabIdByPr[pr.id] = tab.id;
       }
       opened.push(pr.id);
     } catch (error) {
+      ok = false;
       failures.push({ id: pr.id, message: String(error?.message ?? error) });
     }
     done++;
-    onProgress({ type: 'tab', done, total, id: pr.id, ok: failures.at(-1)?.id !== pr.id });
+    onProgress({ type: 'tab', done, total, id: pr.id, ok });
   }
 
   let groupId = group?.id ?? null;
@@ -170,6 +188,7 @@ export async function openIntoGroup({
     movedWindow: Boolean(group) && group.windowId !== focused,
     opened,
     failures,
+    tabIdByPr,
   };
 }
 
