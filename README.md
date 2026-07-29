@@ -150,7 +150,14 @@ The app's setup panel names the step that is actually incomplete rather than say
 cd macos
 ./install-host.sh              # same thing, from a terminal
 ./install-host.sh --uninstall  # remove it everywhere
+
+# Shows every browser found, whether the extension is loaded, and why not
+"build/Pull Deck.app/Contents/MacOS/pulldeck-bridge" --diagnose
 ```
+
+**Browsers are found by shape, not by name.** Any directory under `~/Library/Application Support` holding Chromium's `Local State` marker plus a profile counts — which is how Helium (`net.imput.helium`), Dia and other forks get picked up. A hard-coded list of browser names cannot know about the next fork, and the failure is silent: the extension loads fine and the bridge is simply never installed.
+
+**If you loaded the extension before the id was pinned**, Chromium still has it registered under the old path-derived id — editing `manifest.json` does not retroactively move it. Press the reload arrow on its card at `chrome://extensions`. The app detects this case by name and says so rather than sitting there unconnected.
 
 Both call straight into the app's own installer, so the command line and the GUI cannot drift apart.
 

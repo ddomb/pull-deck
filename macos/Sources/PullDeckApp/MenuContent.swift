@@ -258,7 +258,9 @@ struct MenuContent: View {
                     done: bridge.extensionFound,
                     title: bridge.extensionFound
                         ? "Extension loaded in \(bridge.browsersWithExtension.map(\.browser.name).joined(separator: ", "))"
-                        : "Load the extension in your browser"
+                        : bridge.browsersNeedingReload.isEmpty
+                            ? "Load the extension in your browser"
+                            : "Reload the extension in \(bridge.browsersNeedingReload.map(\.browser.name).joined(separator: ", "))"
                 )
                 step(
                     done: bridge.bridgeInstalled,
@@ -283,7 +285,9 @@ struct MenuContent: View {
                 }
                 .controlSize(.small)
 
-                Text("Turn on Developer mode, choose Load unpacked, and pick the revealed folder. The bridge is installed automatically the moment it appears.")
+                Text(bridge.browsersNeedingReload.isEmpty
+                     ? "Turn on Developer mode, choose Load unpacked, and pick the revealed folder. The bridge installs itself the moment it appears."
+                     : "Pull Deck is loaded, but under an id from before the id was pinned — Chromium keeps whatever id an extension had when it was loaded. Press the reload arrow on its card and this sorts itself out.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

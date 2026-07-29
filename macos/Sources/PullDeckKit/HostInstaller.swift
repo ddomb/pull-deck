@@ -13,25 +13,14 @@ public enum HostInstaller {
     public static let extensionID = "jdpikjmmmljjpkmfmhgildnaihbpmfpj"
     public static let hostName = "com.pulldeck.bridge"
 
-    /// Relative to ~/Library/Application Support. Each is checked both directly
-    /// and with a "User Data" suffix, which is where some forks keep profiles.
-    static let knownBrowsers: [(name: String, path: String)] = [
-        ("Chrome", "Google/Chrome"),
-        ("Chrome Beta", "Google/Chrome Beta"),
-        ("Chrome Canary", "Google/Chrome Canary"),
-        ("Chrome Dev", "Google/Chrome Dev"),
-        ("Chromium", "Chromium"),
-        ("Edge", "Microsoft Edge"),
-        ("Edge Beta", "Microsoft Edge Beta"),
-        ("Edge Dev", "Microsoft Edge Dev"),
-        ("Edge Canary", "Microsoft Edge Canary"),
-        ("Brave", "BraveSoftware/Brave-Browser"),
-        ("Brave Beta", "BraveSoftware/Brave-Browser-Beta"),
-        ("Brave Nightly", "BraveSoftware/Brave-Browser-Nightly"),
-        ("Vivaldi", "Vivaldi"),
-        ("Arc", "Arc"),
-        ("Opera", "com.operasoftware.Opera"),
-    ]
+    /// Chromium writes this file at the root of every user data directory. It
+    /// is the only reliable marker of "a Chromium-family browser lives here".
+    ///
+    /// Deliberately not a list of known browser names. A hard-coded list cannot
+    /// know about Helium (`net.imput.helium`), Dia, or whatever ships next, and
+    /// the failure mode is silent: the extension loads fine and the bridge is
+    /// simply never installed.
+    static let userDataMarker = "Local State"
 
     public struct Browser: Hashable, Identifiable {
         public let name: String
@@ -52,8 +41,12 @@ public enum HostInstaller {
         public let manifestPresent: Bool
         /// Present *and* pointing at this exact relay with this exact extension.
         public let manifestCorrect: Bool
+        /// Set when Pull Deck is loaded here but under a pre-pinning id, which
+        /// a reload fixes.
+        public let legacyID: String?
 
         public var id: String { browser.id }
+        public var needsReload: Bool { !extensionLoaded && legacyID != nil }
         public var needsInstall: Bool { extensionLoaded && !manifestCorrect }
         public var ready: Bool { extensionLoaded && manifestCorrect }
         /// A manifest we wrote for a browser that no longer has the extension.
@@ -67,27 +60,63 @@ public enum HostInstaller {
             .appendingPathComponent("Library/Application Support", isDirectory: true)
     }
 
-    /// Every Chromium-family browser with at least one profile on this Mac.
+    /// Every Chromium-family browser with at least one profile on this Mac,
+    /// found by shape rather than by name.
+    ///
+    /// Two levels deep covers everything seen in the wild: `net.imput.helium`
+    /// and `Microsoft Edge` sit directly under Application Support, while
+    /// `Google/Chrome` and `Dia/User Data` are nested one further.
     public static func discover(root: URL? = nil) -> [Browser] {
         let base = root ?? supportRoot
+        let fm = FileManager.default
         var found: [Browser] = []
-        for candidate in knownBrowsers {
-            for suffix in ["", "User Data"] {
-                var dir = base.appendingPathComponent(candidate.path, isDirectory: true)
-                if !suffix.isEmpty { dir = dir.appendingPathComponent(suffix, isDirectory: true) }
-                guard !profiles(in: dir).isEmpty else { continue }
-                found.append(Browser(name: candidate.name, userDataDir: dir))
-                break // a browser keeps its profiles in one place, not both
+        var seen = Set<String>()
+
+        func consider(_ dir: URL) {
+            guard !seen.contains(dir.path), isUserDataDirectory(dir) else { return }
+            seen.insert(dir.path)
+            found.append(Browser(name: displayName(for: dir), userDataDir: dir))
+        }
+
+        func children(of dir: URL) -> [URL] {
+            (try? fm.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
+            ))?.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true } ?? []
+        }
+
+        for entry in children(of: base) {
+            consider(entry)
+            // Only descend when the parent is not itself a user data directory;
+            // a browser keeps its profiles in one place, not two.
+            if !seen.contains(entry.path) {
+                for sub in children(of: entry) { consider(sub) }
             }
         }
-        return found
+        return found.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    static func isUserDataDirectory(_ dir: URL) -> Bool {
+        FileManager.default.fileExists(atPath: dir.appendingPathComponent(userDataMarker).path)
+            && !profiles(in: dir).isEmpty
+    }
+
+    /// Turn a directory into something worth showing a human:
+    /// `Google/Chrome` → Chrome, `Dia/User Data` → Dia, `net.imput.helium` → Helium.
+    static func displayName(for dir: URL) -> String {
+        var name = dir.lastPathComponent
+        if name == "User Data" { name = dir.deletingLastPathComponent().lastPathComponent }
+        // Reverse-DNS bundle identifiers are common for newer forks.
+        if name.contains("."), !name.contains(" "), let last = name.split(separator: ".").last {
+            name = last.capitalized
+        }
+        return name
     }
 
     /// Profile preference files. Extensions are recorded in "Secure
     /// Preferences", not "Preferences" — the latter is empty of them on a
     /// modern Chrome, which is exactly the trap that makes hand-rolled
     /// detection silently report "not loaded".
-    static func profiles(in userDataDir: URL) -> [URL] {
+    public static func profiles(in userDataDir: URL) -> [URL] {
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(
             at: userDataDir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
@@ -106,35 +135,115 @@ public enum HostInstaller {
 
     // MARK: - Detection
 
-    /// Is our extension loaded in this browser, in any profile?
-    public static func isExtensionLoaded(in browser: Browser, id: String = extensionID) -> Bool {
-        let needle = Data(id.utf8)
-        for file in profiles(in: browser.userDataDir) {
-            // Substring pre-filter first: these files run to several megabytes
-            // and parsing every one of them on every scan is wasteful.
-            guard let data = try? Data(contentsOf: file, options: .mappedIfSafe),
-                  data.range(of: needle) != nil else { continue }
-            guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let extensions = root["extensions"] as? [String: Any],
-                  let settings = extensions["settings"] as? [String: Any]
-            else { continue }
-            if settings[id] != nil { return true }
-        }
-        return false
+    // Preference files run to several megabytes and this is polled every few
+    // seconds, so results are cached against the file's modification date.
+    private static let cacheLock = NSLock()
+    private static var loadedCache: [String: (stamp: String, finding: Finding)] = [:]
+
+    public struct Finding {
+        public var pinned = false
+        /// Pull Deck loaded from our folder but under some *other* id — which
+        /// means it was loaded before the id was pinned and has not been
+        /// reloaded since. Chromium keeps an extension registered under
+        /// whatever id it had at load time; editing manifest.json on disk does
+        /// not retroactively change it. Without naming this, the symptom is
+        /// simply that nothing ever connects.
+        public var legacyID: String?
     }
 
-    public static func status(relayPath: String, root: URL? = nil) -> [Status] {
-        discover(root: root).map { browser in
-            let loaded = isExtensionLoaded(in: browser)
+    /// What this browser knows about Pull Deck, across all its profiles.
+    public static func find(in browser: Browser, extensionPath: String? = nil) -> Finding {
+        let path = extensionPath ?? extensionSourcePath()
+        var result = Finding()
+        for file in profiles(in: browser.userDataDir) {
+            let finding = cachedFinding(for: file, extensionPath: path)
+            if finding.pinned { return finding }
+            if result.legacyID == nil { result.legacyID = finding.legacyID }
+        }
+        return result
+    }
+
+    public static func isExtensionLoaded(in browser: Browser) -> Bool {
+        find(in: browser).pinned
+    }
+
+    private static func cachedFinding(for file: URL, extensionPath: String?) -> Finding {
+        // Size as well as mtime: filesystem timestamps have one-second
+        // resolution, and a preferences file can easily change twice inside
+        // the same second.
+        let attributes = try? FileManager.default.attributesOfItem(atPath: file.path)
+        let stamp = attributes.map { attrs -> String in
+            let date = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+            let size = (attrs[.size] as? NSNumber)?.intValue ?? 0
+            return "\(date)-\(size)-\(extensionPath ?? "")"
+        }
+
+        cacheLock.lock()
+        let cached = loadedCache[file.path]
+        cacheLock.unlock()
+        if let cached, let stamp, cached.stamp == stamp { return cached.finding }
+
+        let finding = scan(file: file, extensionPath: extensionPath)
+        if let stamp {
+            cacheLock.lock()
+            loadedCache[file.path] = (stamp, finding)
+            cacheLock.unlock()
+        }
+        return finding
+    }
+
+    private static func scan(file: URL, extensionPath: String?) -> Finding {
+        guard let data = try? Data(contentsOf: file, options: .mappedIfSafe) else { return Finding() }
+
+        // Two cheap substring scans before committing to a JSON parse of
+        // several megabytes; a miss is by far the common case.
+        //
+        // The path probe deliberately uses only the last component. JSON
+        // escapes forward slashes, so these files store "\/Users\/you\/pull-deck"
+        // and a search for the plain path silently matches nothing — which made
+        // the whole legacy-id check a no-op. A folder name has no slashes in it.
+        let mentionsPinned = data.range(of: Data(extensionID.utf8)) != nil
+        let folderName = extensionPath.map { URL(fileURLWithPath: $0).lastPathComponent }
+        let mentionsFolder = folderName.map { !$0.isEmpty && data.range(of: Data($0.utf8)) != nil } ?? false
+        guard mentionsPinned || mentionsFolder else { return Finding() }
+
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let extensions = root["extensions"] as? [String: Any],
+              let settings = extensions["settings"] as? [String: Any]
+        else { return Finding() }
+
+        var finding = Finding()
+        if settings[extensionID] != nil { finding.pinned = true }
+        if let extensionPath, !finding.pinned {
+            let wanted = URL(fileURLWithPath: extensionPath).standardizedFileURL.path
+            for (id, value) in settings where id != extensionID {
+                guard let entry = value as? [String: Any],
+                      let recorded = entry["path"] as? String, recorded.hasPrefix("/"),
+                      URL(fileURLWithPath: recorded).standardizedFileURL.path == wanted
+                else { continue }
+                finding.legacyID = id
+                break
+            }
+        }
+        return finding
+    }
+
+    public static func status(
+        relayPath: String, root: URL? = nil, extensionPath: String? = nil
+    ) -> [Status] {
+        let source = extensionPath ?? extensionSourcePath()
+        return discover(root: root).map { browser in
+            let finding = find(in: browser, extensionPath: source)
             let manifest = readManifest(at: browser.manifestURL)
             let correct = manifest?["path"] as? String == relayPath
                 && (manifest?["allowed_origins"] as? [String])?
                     .contains("chrome-extension://\(extensionID)/") == true
             return Status(
                 browser: browser,
-                extensionLoaded: loaded,
+                extensionLoaded: finding.pinned,
                 manifestPresent: manifest != nil,
-                manifestCorrect: correct
+                manifestCorrect: correct,
+                legacyID: finding.legacyID
             )
         }
     }
@@ -175,11 +284,15 @@ public enum HostInstaller {
     /// lives, remove manifests we left behind where it no longer does.
     /// Idempotent, and cheap enough to run on every launch.
     @discardableResult
-    public static func reconcile(relayPath: String, root: URL? = nil) -> [Status] {
-        for entry in status(relayPath: relayPath, root: root) {
+    public static func reconcile(
+        relayPath: String, root: URL? = nil, extensionPath: String? = nil
+    ) -> [Status] {
+        for entry in status(relayPath: relayPath, root: root, extensionPath: extensionPath) {
             if entry.needsInstall {
                 try? install(into: entry.browser, relayPath: relayPath)
-            } else if entry.stale {
+            } else if entry.stale && !entry.needsReload {
+                // Keep the manifest while the extension is only waiting for a
+                // reload; removing it would just have to be undone in a moment.
                 try? uninstall(from: entry.browser)
             }
         }

@@ -21,6 +21,33 @@ let callerOrigin = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : 
 // Scripted install path. Chrome only ever passes a chrome-extension:// origin,
 // so this flag cannot collide with a real launch. Sharing the app's installer
 // keeps the command line and the GUI from drifting apart.
+// Shows exactly what discovery sees. The failure this exists for — a browser
+// that is not detected — is otherwise completely silent.
+if callerOrigin == "--diagnose" {
+    print("extension id: \(HostInstaller.extensionID)")
+    print("relay:        \(HostInstaller.relayPathInBundle() ?? "NOT FOUND")")
+    let browsers = HostInstaller.discover()
+    print("\ndiscovered \(browsers.count) Chromium user data directories:\n")
+    print("extension source: \(HostInstaller.extensionSourcePath() ?? "unknown")\n")
+    for browser in browsers {
+        let finding = HostInstaller.find(in: browser)
+        let manifest = HostInstaller.readManifest(at: browser.manifestURL) != nil
+        print("  \(finding.pinned ? "●" : "○") \(browser.name)")
+        print("      dir:      \(browser.userDataDir.path)")
+        print("      profiles: \(HostInstaller.profiles(in: browser.userDataDir).count)")
+        print("      loaded:   \(finding.pinned)   manifest: \(manifest)")
+        if let legacy = finding.legacyID {
+            print("      !! loaded under an older id: \(legacy)")
+            print("         It was loaded before the id was pinned. Reload it at")
+            print("         chrome://extensions and it will re-register as the pinned id.")
+        }
+    }
+    if browsers.isEmpty {
+        print("  (none — nothing under ~/Library/Application Support looked like one)")
+    }
+    exit(0)
+}
+
 if callerOrigin == "--install-hosts" || callerOrigin == "--uninstall-hosts" {
     let uninstalling = callerOrigin == "--uninstall-hosts"
     guard let relay = HostInstaller.relayPathInBundle() else {

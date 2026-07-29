@@ -204,13 +204,25 @@ do {
         .appendingPathComponent("pulldeck-installer-\(ProcessInfo.processInfo.processIdentifier)")
     defer { try? fm.removeItem(at: root) }
 
-    /// Writes a profile whose Secure Preferences may or may not list our id.
-    func makeProfile(_ browser: String, profile: String, loaded: Bool) throws {
-        let dir = root.appendingPathComponent(browser).appendingPathComponent(profile)
+    /// Writes a profile whose Secure Preferences may or may not list our id,
+    /// plus the "Local State" file Chromium puts at the user data root.
+    func makeProfile(
+        _ browser: String, profile: String, loaded: Bool,
+        marker: Bool = true, legacyID: String? = nil, sourcePath: String = "/Users/ddomb/pull-deck"
+    ) throws {
+        let userData = root.appendingPathComponent(browser)
+        let dir = userData.appendingPathComponent(profile)
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        if marker {
+            try Data("{}".utf8).write(to: userData.appendingPathComponent("Local State"))
+        }
         var settings: [String: Any] = ["someotherextensionidaaaaaaaaaaaa": ["path": "/tmp/other"]]
         if loaded {
-            settings[HostInstaller.extensionID] = ["path": "/Users/ddomb/pull-deck", "state": 1]
+            settings[HostInstaller.extensionID] = ["path": sourcePath, "state": 1]
+        }
+        if let legacyID {
+            // Same folder, different id: loaded before the id was pinned.
+            settings[legacyID] = ["path": sourcePath, "state": 1]
         }
         let payload: [String: Any] = ["extensions": ["settings": settings]]
         // Extensions live in "Secure Preferences", not "Preferences".
@@ -222,24 +234,44 @@ do {
     try makeProfile("Google/Chrome", profile: "Profile 6", loaded: true)
     try makeProfile("Microsoft Edge", profile: "Default", loaded: false)
     try makeProfile("Vivaldi", profile: "Default", loaded: false)
+    // A fork nobody hard-codes: reverse-DNS directory, straight under the root.
+    try makeProfile("net.imput.helium", profile: "Default", loaded: true)
+    // A fork that nests its profiles one level further down.
+    try makeProfile("Dia/User Data", profile: "Default", loaded: false)
+    // Looks like a profile tree but has no Local State: not a browser.
+    try makeProfile("SomeOtherApp", profile: "Default", loaded: true, marker: false)
 
     let browsers = HostInstaller.discover(root: root)
-    check("discovers every browser with profiles", browsers.count == 3,
+    check("discovers browsers by shape, not by a hard-coded name list",
+          browsers.count == 5, browsers.map(\.name).joined(separator: ","))
+    check("finds a reverse-DNS fork like Helium", browsers.contains { $0.name == "Helium" },
           browsers.map(\.name).joined(separator: ","))
-    check("discovers them by name", Set(browsers.map(\.name)) == Set(["Chrome", "Edge", "Vivaldi"]))
+    check("unwraps a User Data directory to its browser name",
+          browsers.contains { $0.name == "Dia" })
+    check("ignores a directory with no Local State marker",
+          !browsers.contains { $0.name == "SomeOtherApp" })
+    // Names come from the directory now, so it is "Microsoft Edge" rather than
+    // the "Edge" a lookup table used to supply.
+    check("discovers them by name",
+          Set(browsers.map(\.name)) == Set(["Chrome", "Microsoft Edge", "Vivaldi", "Helium", "Dia"]),
+          browsers.map(\.name).joined(separator: ","))
 
-    let chrome = browsers.first { $0.name == "Chrome" }!
-    let edge = browsers.first { $0.name == "Edge" }!
+    guard let chrome = browsers.first(where: { $0.name == "Chrome" }),
+          let edge = browsers.first(where: { $0.name == "Microsoft Edge" })
+    else {
+        check("fixture browsers were discovered", false, browsers.map(\.name).joined(separator: ","))
+        throw NSError(domain: "selftest", code: 1)
+    }
     check("finds the extension in a non-default profile", HostInstaller.isExtensionLoaded(in: chrome))
     check("and does not invent it where it is absent", !HostInstaller.isExtensionLoaded(in: edge))
 
     let relay = "/Applications/Pull Deck.app/Contents/MacOS/pulldeck-bridge"
     var result = HostInstaller.reconcile(relayPath: relay, root: root)
 
-    check("installs only where the extension actually is",
-          result.filter(\.manifestPresent).map(\.browser.name) == ["Chrome"],
+    check("installs into every browser that has it, and no others",
+          result.filter(\.manifestPresent).map(\.browser.name) == ["Chrome", "Helium"],
           result.filter(\.manifestPresent).map(\.browser.name).joined(separator: ","))
-    check("and reports it ready", result.first { $0.browser.name == "Chrome" }?.ready == true)
+    check("and reports them ready", result.filter(\.ready).count == 2)
 
     let written = HostInstaller.readManifest(at: chrome.manifestURL)
     check("manifest names the relay absolutely", written?["path"] as? String == relay)
@@ -259,12 +291,39 @@ do {
     _ = HostInstaller.reconcile(relayPath: moved, root: root)
     check("reconcile is idempotent", try Data(contentsOf: chrome.manifestURL) == before)
 
-    // Remove the extension from Chrome: the manifest we left behind is stale.
+    // Remove the extension from Chrome only: that manifest is now stale, while
+    // Helium still has it and must be left alone.
     try makeProfile("Google/Chrome", profile: "Profile 6", loaded: false)
     result = HostInstaller.reconcile(relayPath: moved, root: root)
-    check("removes a manifest once the extension is gone",
+    check("removes a manifest once the extension is gone from that browser",
           !fm.fileExists(atPath: chrome.manifestURL.path))
-    check("and reports nothing ready", result.allSatisfy { !$0.ready })
+    check("but leaves the browser that still has it alone",
+          result.first { $0.browser.name == "Helium" }?.ready == true)
+
+    // The exact trap: loaded from our folder, but under a pre-pinning id.
+    // Chromium keeps whatever id an extension had when it was loaded, so
+    // editing manifest.json does not move it. Detected and named, or the
+    // symptom is simply that nothing ever connects.
+    let source = "/Users/ddomb/pull-deck"
+    try makeProfile("Vivaldi", profile: "Default", loaded: false,
+                    legacyID: "ookeaeknjkeleihdkgfmomjlfmbfglek", sourcePath: source)
+    let vivaldi = HostInstaller.discover(root: root).first { $0.name == "Vivaldi" }!
+    let finding = HostInstaller.find(in: vivaldi, extensionPath: source)
+
+    check("spots the extension loaded under a pre-pinning id",
+          finding.legacyID == "ookeaeknjkeleihdkgfmomjlfmbfglek", finding.legacyID ?? "nil")
+    check("and does not mistake it for being properly loaded", !finding.pinned)
+
+    let withLegacy = HostInstaller.status(relayPath: moved, root: root, extensionPath: source)
+        .first { $0.browser.name == "Vivaldi" }
+    check("reports it as needing a reload", withLegacy?.needsReload == true)
+
+    // A different unpacked extension must not be mistaken for ours.
+    try makeProfile("Dia/User Data", profile: "Default", loaded: false,
+                    legacyID: "unrelatedextensionidbbbbbbbbbbbb", sourcePath: "/somewhere/else")
+    let dia = HostInstaller.discover(root: root).first { $0.name == "Dia" }!
+    check("ignores unpacked extensions from other folders",
+          HostInstaller.find(in: dia, extensionPath: source).legacyID == nil)
 } catch {
     check("host installer suite ran", false, "threw \(error)")
 }

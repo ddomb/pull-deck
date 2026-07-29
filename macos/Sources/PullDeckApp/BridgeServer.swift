@@ -92,6 +92,9 @@ final class BridgeServer: ObservableObject {
     var extensionFound: Bool { !browsersWithExtension.isEmpty }
     var bridgeInstalled: Bool { setup.contains(where: \.ready) }
 
+    /// Loaded, but under a pre-pinning id — one reload away from working.
+    var browsersNeedingReload: [HostInstaller.Status] { setup.filter(\.needsReload) }
+
     /// Chrome will not open a `chrome://` URL handed to it by another app, but
     /// it does accept one on its command line.
     func openExtensionsPage() {
