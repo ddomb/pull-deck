@@ -15,6 +15,24 @@ import { pullRequestKey } from './pr-url.js';
 const CACHE_TTL_MS = 60_000;
 const BADGE_BG = '#1d7f8c';
 
+// Live polling, and the guards that keep it from being expensive.
+//
+// One GraphQL round trip costs about 3 points against a 5,000/hour budget, so
+// a 5-second cadence spends roughly 2,160 points an hour — viable, but only
+// worth paying while somebody is actually looking. Callers ask for `force` as
+// often as they like; these two constants decide what actually reaches GitHub.
+export const LIVE_INTERVAL_MS = 5_000;
+
+/** No forced refresh may hit the network more often than this, ever. */
+const MIN_FETCH_INTERVAL_MS = 4_000;
+
+/** Below this many points remaining, stretch to one request a minute. */
+const LOW_BUDGET_POINTS = 500;
+const LOW_BUDGET_INTERVAL_MS = 60_000;
+
+/** Below this, stop entirely and coast on cache until the budget resets. */
+const EXHAUSTED_POINTS = 100;
+
 /* --------------------------------------------------------------- progress -- */
 
 const progressListeners = new Set();
@@ -35,6 +53,32 @@ function emit(event) {
   }
 }
 
+/* ------------------------------------------------------- budget throttle -- */
+
+/**
+ * May a forced refresh actually reach GitHub right now?
+ *
+ * This is the single choke point for every caller — the popup's live loop, the
+ * menu bar app's live loop, the background alarm and the refresh button all
+ * pass through it. Rate limiting is enforced here rather than in each caller
+ * so that two surfaces polling at once cannot double the spend.
+ */
+export function mayFetchNow(cache, now = Date.now()) {
+  if (!cache?.fetchedAt) return true;
+  const remaining = cache.rateLimit?.remaining;
+  if (typeof remaining === 'number' && remaining < EXHAUSTED_POINTS) {
+    // Coast on cache until the window resets rather than spending the last of
+    // the budget on a list that has not changed.
+    const resetAt = Date.parse(cache.rateLimit?.resetAt ?? '');
+    return Number.isFinite(resetAt) ? now >= resetAt : false;
+  }
+  const floor =
+    typeof remaining === 'number' && remaining < LOW_BUDGET_POINTS
+      ? LOW_BUDGET_INTERVAL_MS
+      : MIN_FETCH_INTERVAL_MS;
+  return now - cache.fetchedAt >= floor;
+}
+
 /* ------------------------------------------------------------------ state -- */
 
 /** Everything a client needs for a full render, in one round trip. */
@@ -49,6 +93,22 @@ export async function loadState({ force = false } = {}) {
   // Surface whatever the background refresh last hit, so a token revoked
   // hours ago is explained rather than just showing a stale list.
   let error = settings.lastError ?? null;
+
+  if (force && cache && !mayFetchNow(cache)) {
+    // Asked for fresh data sooner than the budget allows. Serving the cache is
+    // the honest answer: the alternative is spending the hour's allowance in
+    // twenty minutes and then showing nothing at all.
+    return {
+      stage: 'list',
+      settings: publicSettings(settings),
+      viewer: cache.viewer,
+      scopes: cache.scopes,
+      rateLimit: cache.rateLimit,
+      fetchedAt: cache.fetchedAt,
+      group: await safeGroupState(settings),
+      error,
+    };
+  }
 
   if (force || stale) {
     try {

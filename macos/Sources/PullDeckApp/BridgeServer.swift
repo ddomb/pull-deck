@@ -30,7 +30,16 @@ final class BridgeServer: ObservableObject {
     private let writeQueue = DispatchQueue(label: "com.pulldeck.bridge.write")
     private let installQueue = DispatchQueue(label: "com.pulldeck.hosts")
     private var pollTimer: Timer?
+    private var liveTimer: Timer?
     private let socketPath: String
+
+    /// Five seconds while the panel is on screen, one minute while only the
+    /// menu bar count is visible. The extension throttles what actually reaches
+    /// GitHub, so these are requests for freshness rather than guaranteed
+    /// network calls — but there is no reason to ask at five-second resolution
+    /// for a number nobody is looking at.
+    static let liveInterval: TimeInterval = 5
+    static let idleInterval: TimeInterval = 60
 
     /// One listener per process, started at launch rather than when the panel
     /// is first opened — Chrome's extension reaches out on its own schedule and
@@ -77,9 +86,40 @@ final class BridgeServer: ObservableObject {
         }
     }
 
+    /// Driven by the panel appearing and disappearing.
+    func setPanelVisible(_ visible: Bool) {
+        guard panelVisible != visible else { return }
+        panelVisible = visible
+        restartLiveUpdates()
+        if visible { refresh() } // don't make the first look wait for a tick
+    }
+
+    private var panelVisible = false
+
+    private func restartLiveUpdates() {
+        liveTimer?.invalidate()
+        liveTimer = nil
+        guard isAttached else { return }
+        let interval = panelVisible ? Self.liveInterval : Self.idleInterval
+        liveTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tick() }
+        }
+    }
+
+    private func tick() {
+        guard isAttached, !isOpening else { return }
+        send(.getState(id: nextID(), force: true))
+    }
+
+    /// True between clicking Open and the run settling, so a live tick cannot
+    /// stomp the progress display.
+    private var isOpening = false
+
     func stop() {
         pollTimer?.invalidate()
         pollTimer = nil
+        liveTimer?.invalidate()
+        liveTimer = nil
         if clientFD >= 0 { close(clientFD) }
         if listenFD >= 0 { close(listenFD) }
         unlink(socketPath)
@@ -136,6 +176,7 @@ final class BridgeServer: ObservableObject {
         isAttached = true
         lastFailure = nil
         send(.getState(id: nextID(), force: false))
+        restartLiveUpdates()
     }
 
     private func detach(_ fd: Int32) {
@@ -143,6 +184,8 @@ final class BridgeServer: ObservableObject {
         clientFD = -1
         isAttached = false
         progress = nil
+        liveTimer?.invalidate()
+        liveTimer = nil
     }
 
     // MARK: - Inbound
@@ -165,7 +208,9 @@ final class BridgeServer: ObservableObject {
             lastFailure = error.message
         case .progress(let event):
             progress = event.kind == "done" ? nil : event
+            if event.kind == "done" { isOpening = false }
         case .reply(_, let ok, _, let error):
+            isOpening = false
             if !ok { lastFailure = error?.message ?? "The extension rejected that." }
             if ok { lastFailure = nil }
         case .unknown:
@@ -198,7 +243,10 @@ final class BridgeServer: ObservableObject {
     }
 
     func refresh() { send(.getState(id: nextID(), force: true)) }
-    func openAll() { send(.openAll(id: nextID(), scope: scope)) }
+    func openAll() {
+        isOpening = true
+        send(.openAll(id: nextID(), scope: scope))
+    }
     func open(_ pr: PullRequest) { send(.openOne(id: nextID(), prId: pr.id)) }
     func setGroupColor(_ color: String) {
         send(.settings(id: nextID(), patch: SettingsPatch(groupColor: color)))

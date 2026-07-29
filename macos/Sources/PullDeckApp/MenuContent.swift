@@ -32,6 +32,9 @@ struct MenuContent: View {
         }
         .frame(width: 380)
         .background(Color(nsColor: .windowBackgroundColor))
+        // Live only while the panel is actually on screen.
+        .onAppear { bridge.setPanelVisible(true) }
+        .onDisappear { bridge.setPanelVisible(false) }
     }
 
     // MARK: - Header

@@ -5,6 +5,7 @@
 import { icons } from './icons.js';
 import { GROUP_COLORS } from './store.js';
 import { pullRequestKey } from './pr-url.js';
+import { LIVE_INTERVAL_MS } from './app-state.js';
 
 /* ------------------------------------------------------------- transport -- */
 
@@ -40,6 +41,8 @@ const state = {
   focusIndex: 0,
   busy: false,
   firstLoad: true,
+  liveTimer: null,
+  renderedSignature: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -226,12 +229,32 @@ function markRowInGroup(id) {
 
 /* ------------------------------------------------------------------ render -- */
 
+/**
+ * Everything a row draws, plus what the group knows. Rebuilding the list on a
+ * five-second tick would reset the scroll position, drop keyboard focus and
+ * replay the entrance animation, so the rows are only rebuilt when something
+ * they display has actually changed.
+ */
+function listSignature() {
+  const rows = visible()
+    .map((pr) =>
+      [pr.id, pr.updatedAt, pr.reviewDecision, pr.checks, pr.isDraft, pr.additions, pr.deletions].join(':')
+    )
+    .join('|');
+  const counts = SCOPES.map((scope) => state.scopes[scope]?.length ?? 0).join(',');
+  return `${state.scope}#${counts}#${rows}#${[...state.groupKeys].sort().join(',')}`;
+}
+
 function render() {
   renderStage();
   if (state.stage !== 'list') return;
 
   renderSegments();
-  renderList();
+  const signature = listSignature();
+  if (signature !== state.renderedSignature) {
+    renderList();
+    state.renderedSignature = signature;
+  }
   renderDock();
   renderSettings();
 }
@@ -479,19 +502,51 @@ function chromeGroupColor(name) {
 
 /* ------------------------------------------------------------------ actions -- */
 
-async function load({ force = false } = {}) {
-  if (force) {
+async function load({ force = false, quiet = false } = {}) {
+  if (force && !quiet) {
     dom.refresh.dataset.spinning = 'true';
     dom.refresh.disabled = true;
   }
   try {
     apply(await send({ type: 'load', force }));
   } catch (error) {
+    // A live tick that fails must not replace a working list with an error
+    // screen; the next tick will most likely succeed.
+    if (quiet) return;
     showFatal(error);
   } finally {
-    delete dom.refresh.dataset.spinning;
-    dom.refresh.disabled = state.stage === 'onboarding';
+    if (!quiet) {
+      delete dom.refresh.dataset.spinning;
+      dom.refresh.disabled = state.stage === 'onboarding';
+    }
   }
+}
+
+/**
+ * Keep the list live while the popup is open.
+ *
+ * The popup is the only surface that can poll without keeping a service worker
+ * alive, because it is a real document for as long as it is on screen. The
+ * request is throttled service-worker side, so asking every five seconds does
+ * not mean fetching every five seconds when the budget is tight.
+ */
+function startLiveUpdates() {
+  if (state.liveTimer) return;
+  state.liveTimer = setInterval(() => {
+    if (state.busy || dom.settings.hasAttribute('data-open')) return;
+    if (state.stage !== 'list') return;
+    void load({ force: true, quiet: true });
+  }, LIVE_INTERVAL_MS);
+
+  // Chrome tears the popup down on blur, but clean up anyway rather than
+  // relying on that.
+  window.addEventListener('pagehide', stopLiveUpdates, { once: true });
+}
+
+function stopLiveUpdates() {
+  if (!state.liveTimer) return;
+  clearInterval(state.liveTimer);
+  state.liveTimer = null;
 }
 
 function apply(data) {
@@ -517,6 +572,8 @@ function apply(data) {
     state.firstLoad = false;
   }
   render();
+  if (data.stage === 'list') startLiveUpdates();
+  else stopLiveUpdates();
 }
 
 function showFatal(error) {

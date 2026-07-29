@@ -120,6 +120,18 @@
     loading: { hang: true },
   };
 
+  // ?instrument=1 captures the live-update interval so a test can drive ticks
+  // deterministically — hidden browser panes throttle timers to about one a
+  // minute, which makes wall-clock verification useless.
+  if (new URLSearchParams(location.search).get('instrument')) {
+    const real = globalThis.setInterval;
+    globalThis.__pullDeckTicks = [];
+    globalThis.setInterval = (fn, ms, ...rest) => {
+      globalThis.__pullDeckTicks.push({ fn, ms });
+      return real(fn, ms, ...rest);
+    };
+  }
+
   const config = byScenario[scenario] ?? byScenario.mixed;
   const groupKeys = new Set(config.keys ?? []);
   let progressHandler = () => {};

@@ -73,6 +73,22 @@ Deliberate behaviour worth knowing: **the group stays in whichever window it alr
 | `←` `→` | Switch list (when a tab is focused) |
 | `Esc` | Close settings |
 
+## Live updates
+
+Both surfaces poll every 5 seconds while they are on screen — the popup while it is open, the menu bar app while its panel is open. With the panel closed the app drops to 60 seconds, which keeps the badge honest, and with nothing attached the 15-minute background alarm takes over.
+
+The rate is gated where it matters rather than in each caller. `mayFetchNow()` in `app-state.js` is the single choke point every request passes through:
+
+| Condition | Effect |
+| --- | --- |
+| Less than 4s since the last network fetch | Serve cache. Two surfaces polling at once cannot double the spend. |
+| Under 500 points remaining | Stretch to one request a minute |
+| Under 100 points remaining | Stop entirely and coast on cache until the window resets |
+
+That last one matters: the alternative is spending the hour's allowance in twenty minutes and then showing nothing at all.
+
+**What it costs.** One GraphQL round trip is about 3 points against a 5,000/hour budget, so a sustained 5-second cadence runs at roughly 2,160 points/hour — viable, but only worth paying while somebody is looking, which is why it is gated on visibility. Rows are only rebuilt when something they display actually changed, so a tick does not reset your scroll position or drop keyboard focus.
+
 ## Data source
 
 One GraphQL request per refresh covers all three lists, the viewer, review decisions, CI rollup, and diff sizes. The REST `/search/issues` endpoint returns neither `reviewDecision` nor check status, which would have meant three extra calls per pull request. Cost is roughly 3 points against a 5,000/hour budget; the list is cached for 60 seconds so reopening the popup is free.
