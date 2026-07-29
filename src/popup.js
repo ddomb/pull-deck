@@ -6,6 +6,7 @@ import { icons } from './icons.js';
 import { GROUP_COLORS } from './store.js';
 import { pullRequestKey } from './pr-url.js';
 import { LIVE_INTERVAL_MS } from './app-state.js';
+import { el, glyph, age, badgesFor } from './pr-row.js';
 
 /* ------------------------------------------------------------- transport -- */
 
@@ -87,37 +88,8 @@ const dom = {
 
 /* ----------------------------------------------------------------- helpers -- */
 
-function el(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-
-/** Icon markup is authored in icons.js, never derived from remote data. */
-function glyph(markup) {
-  const holder = document.createElement('span');
-  holder.innerHTML = markup;
-  return holder.firstElementChild;
-}
-
 function setIcon(button, markup) {
   button.insertBefore(glyph(markup), button.firstChild);
-}
-
-/** Compact age: 4m, 3h, 6d, 2w. Terser than Intl and matches the copy. */
-function age(iso) {
-  const seconds = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-  if (seconds < 60) return 'now';
-  const minutes = seconds / 60;
-  if (minutes < 60) return `${Math.floor(minutes)}m`;
-  const hours = minutes / 60;
-  if (hours < 24) return `${Math.floor(hours)}h`;
-  const days = hours / 24;
-  if (days < 7) return `${Math.floor(days)}d`;
-  const weeks = days / 7;
-  if (weeks < 53) return `${Math.floor(weeks)}w`;
-  return `${Math.floor(days / 365)}y`;
 }
 
 const visible = () => state.scopes[state.scope] ?? [];
@@ -127,35 +99,6 @@ const inGroup = (pr) => {
   return key !== null && state.groupKeys.has(key);
 };
 const pending = () => visible().filter((pr) => !inGroup(pr));
-
-/* ------------------------------------------------------------------ badges -- */
-
-function badge(tone, iconMarkup, label) {
-  const node = el('span', 'badge');
-  node.dataset.tone = tone;
-  node.append(glyph(iconMarkup), el('span', null, label));
-  return node;
-}
-
-function badgesFor(pr) {
-  const out = [];
-  if (pr.isDraft) out.push(badge('neutral', icons.draft, 'Draft'));
-
-  if (pr.reviewDecision === 'APPROVED') out.push(badge('success', icons.approved, 'Approved'));
-  else if (pr.reviewDecision === 'CHANGES_REQUESTED') out.push(badge('danger', icons.changes, 'Changes'));
-  else if (pr.reviewDecision === 'REVIEW_REQUIRED' && !pr.isDraft) {
-    out.push(badge('neutral', icons.review, 'In review'));
-  }
-
-  // Only non-passing checks earn a badge. A green tick on every row is noise,
-  // and the thing worth spotting in a glance is the failure.
-  if (pr.checks === 'FAILURE' || pr.checks === 'ERROR') {
-    out.push(badge('danger', icons.ciFail, 'Checks failed'));
-  } else if (pr.checks === 'PENDING' || pr.checks === 'EXPECTED') {
-    out.push(badge('pending', icons.ciPending, 'Checks running'));
-  }
-  return out;
-}
 
 /* -------------------------------------------------------------------- rows -- */
 
