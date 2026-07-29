@@ -141,22 +141,33 @@ async function routeShortcut(tabId, query) {
   // user has to answer, so it gets a page rather than a guess.
   if (result.status !== 'one') return showChooser(tabId, query);
 
-  const target = result.matches[0].url;
-  const open = await findOpenTab(target, tabId);
-  if (!open) {
-    await chrome.tabs.update(tabId, { url: target });
+  const pr = result.matches[0];
+
+  // Already open somewhere: go to that tab and leave it where it is.
+  // Duplicating is the single thing this extension exists to not do, and moving
+  // a tab the user never asked to have moved is its own kind of surprise.
+  //
+  // Closing the tab they typed into is only safe once they are demonstrably
+  // somewhere else. If focusing failed — the tab was closed in the last few
+  // milliseconds, its window went away — closing this one too would leave them
+  // nowhere, having asked to be taken somewhere.
+  const open = await findOpenTab(pr.url, tabId);
+  if (open) {
+    if (await focusTab(open)) await dismissTab(tabId);
+    else await chrome.tabs.update(tabId, { url: pr.url });
     return;
   }
 
-  // Already open somewhere: go to that tab instead of making a second one.
-  // Duplicating is the single thing this extension exists to not do.
-  //
-  // Closing the tab the user typed into is only safe once they are demonstrably
-  // somewhere else. If focusing the existing tab failed — it was closed in the
-  // last few milliseconds, its window went away — closing this one too would
-  // leave them nowhere, having asked to be taken somewhere.
-  if (await focusTab(open)) await dismissTab(tabId, target);
-  else await chrome.tabs.update(tabId, { url: target });
+  // Not open anywhere, so it goes in the group — the same place every other
+  // way of opening a pull request here puts it. openOne creates the tab
+  // inactive, groups it, then focuses it by id.
+  const grouped = await openOne({ id: pr.id, url: pr.url });
+  if (grouped.failures.length > 0) {
+    // Grouping is not worth losing the navigation over. Go there plainly.
+    await chrome.tabs.update(tabId, { url: pr.url });
+    return;
+  }
+  await dismissTab(tabId);
 }
 
 /** The tab already showing this pull request, by identity rather than URL. */
@@ -181,21 +192,19 @@ async function focusTab(tab) {
 }
 
 /**
- * Close the tab the shortcut was typed into, having sent the user elsewhere.
+ * Close the tab the shortcut was typed into, the user now being on the pull
+ * request somewhere else.
  *
- * Except when it is the last one in its window: closing that closes the window,
- * and no shortcut should ever cost somebody a window. In that case it goes to
- * the pull request instead — a second tab on the same PR is untidy, but the
- * next "Open in group" adopts it rather than opening a third.
+ * Unconditional, including when it is the last tab in its window. That looked
+ * worth guarding against — closing the last tab closes the window — but the
+ * window in that case holds nothing except a shortcut URL that never resolved,
+ * and the user is already looking at another one. Redirecting it to the pull
+ * request instead would just produce the duplicate tab this whole extension
+ * exists to avoid. Only failing to place the user somewhere keeps this tab
+ * alive, and both callers handle that by redirecting rather than closing.
  */
-async function dismissTab(tabId, fallbackUrl) {
+async function dismissTab(tabId) {
   try {
-    const tab = await chrome.tabs.get(tabId);
-    const siblings = await chrome.tabs.query({ windowId: tab.windowId });
-    if (siblings.length <= 1) {
-      await chrome.tabs.update(tabId, { url: fallbackUrl });
-      return;
-    }
     await chrome.tabs.remove(tabId);
   } catch {
     // Already gone.

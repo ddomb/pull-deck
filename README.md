@@ -103,9 +103,32 @@ It is not a real address, and it never reaches the network. The extension catche
 
 That caution is the whole design. A miss is a mild annoyance; a *wrong* hit sends you to somebody else's pull request and you may not notice until you have already commented on it. So matching is on whole tokens, not substrings: `abv-424` does not match `ABV-4242`, and `abv-4242` does not match `ABV-42421`. `test/resolve.test.mjs` leads with those two cases.
 
-**Already open? You go to that tab.** The shortcut resolves to a pull request, then looks for it using the same `(host, owner, repo, number)` identity the rest of the extension uses. If a tab already has it, that tab is focused and the one you typed into closes — unless it is the last tab in its window, because no shortcut should ever cost somebody a window.
+**Already open? You go to that tab. Otherwise it lands in the group.** The shortcut resolves to a pull request and then looks for it using the same `(host, owner, repo, number)` identity the rest of the extension uses — across every window, not just the current one. Found, and that tab is focused and left exactly where it is; moving a tab you never asked to have moved is its own kind of surprise. Not found, and it goes through the same `openIntoGroup()` the popup uses, so it arrives in the group with everything else.
 
-The shortcut deliberately does *not* route through the tab group. It is a redirect, and a redirect that quietly created a group would be doing something you did not ask for. The tab it leaves behind is not a permanent stray: the next **Open in group** adopts it.
+Either way the tab you typed into closes, because you are by then looking at the pull request somewhere else. The one thing that keeps it alive is failing to put you anywhere: if focusing the existing tab fails, or grouping does, it redirects in place instead.
+
+### From the Claude Code footer
+
+Typing the URL by hand is the fallback, not the point. Claude Code's `footerLinksRegexes` turns any ticket id that appears in turn output — a tool result, or something Claude wrote — into a clickable badge in the footer row. Point that badge at the shortcut and the whole path is one click.
+
+In `~/.claude/settings.json` (user settings only — the setting is ignored in project `.claude/settings.json` and in `.claude/settings.local.json`):
+
+```json
+"footerLinksRegexes": [
+  {
+    "type": "regex",
+    "pattern": "\\b(?<key>[Aa][Bb][Vv]-\\d+)\\b",
+    "label": "PR {key}",
+    "url": "http://pull-dock/pr/{key}"
+  }
+]
+```
+
+`http` is fine here: the scheme allowlist is `https`, `http`, and a set of editor and workspace deep links, and the origin only has to be literal in the template — which `http://pull-dock` is.
+
+The character classes are doing real work. Claude Code compiles the pattern itself and it is not documented whether it adds the `i` flag, so `[Aa][Bb][Vv]` matches `ABV-4242` in a branch name and `abv-4242` in prose without depending on the answer. The matcher lowercases both sides anyway, so the captured case never reaches GitHub.
+
+Two things worth knowing before relying on it: at most **five** badges render at once, the oldest displaced by newer matches, and `/clear` removes them all. And the badge opens your **default** browser — the shortcut only resolves in a browser that has Pull Deck loaded.
 
 ## Live updates
 
