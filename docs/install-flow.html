@@ -1,0 +1,361 @@
+<meta charset="utf-8" />
+<title>Pull Deck — fresh install</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: oklch(17% 0.012 60);
+    --surface: oklch(22% 0.013 60);
+    --surface-2: oklch(26% 0.014 60);
+    --line: oklch(32% 0.014 60);
+    --text: oklch(94% 0.008 60);
+    --dim: oklch(72% 0.012 60);
+    --faint: oklch(58% 0.012 60);
+    --accent: oklch(72% 0.11 190);
+    --accent-deep: oklch(52% 0.12 190);
+    --auto: oklch(74% 0.13 152);
+    --warn: oklch(80% 0.13 82);
+    --bad: oklch(70% 0.16 25);
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 48px 24px 96px; background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: 15px; line-height: 1.6; letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 30px; font-weight: 640; letter-spacing: -0.028em; margin: 0 0 6px; }
+  h2 {
+    font-size: 12px; font-weight: 640; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--faint); margin: 52px 0 16px;
+  }
+  .lede { color: var(--dim); margin: 0 0 34px; max-width: 62ch; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  pre {
+    font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 16px; overflow-x: auto; margin: 0;
+  }
+  pre .c { color: var(--faint); }
+
+  .headline {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 30px;
+  }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .stat b { display: block; font-size: 26px; font-weight: 640; letter-spacing: -0.02em; }
+  .stat span { font-size: 12px; color: var(--faint); }
+
+  .steps { display: grid; gap: 10px; }
+  .step {
+    display: grid; grid-template-columns: 30px 1fr; gap: 14px; align-items: start;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 15px 17px;
+  }
+  .step.auto { background: color-mix(in oklab, var(--surface), var(--auto) 6%); border-color: color-mix(in oklab, var(--line), var(--auto) 22%); }
+  .num {
+    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+    font-size: 12px; font-weight: 640; background: var(--accent-deep); color: oklch(98% 0.01 190);
+  }
+  .step.auto .num { background: transparent; border: 1.5px dashed color-mix(in oklab, var(--auto), transparent 35%); color: var(--auto); }
+  .step h3 { margin: 2px 0 4px; font-size: 15px; font-weight: 600; }
+  .step p { margin: 0; color: var(--dim); font-size: 13.5px; }
+  .tag {
+    float: right; font-size: 10.5px; font-weight: 640; letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 999px; margin-left: 10px;
+  }
+  .tag.you { background: color-mix(in oklab, var(--accent), transparent 82%); color: var(--accent); }
+  .tag.rob { background: color-mix(in oklab, var(--auto), transparent 84%); color: var(--auto); }
+
+  .toggle { display: flex; gap: 6px; margin-bottom: 14px; }
+  .toggle button {
+    font: inherit; font-size: 13px; font-weight: 550; color: var(--dim); cursor: pointer;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 6px 15px;
+    transition: all .18s cubic-bezier(.25,1,.5,1);
+  }
+  .toggle button[aria-pressed="true"] { background: var(--accent-deep); border-color: var(--accent-deep); color: oklch(98% 0.01 190); }
+  figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px; }
+  svg { display: block; width: 100%; height: auto; }
+  figcaption { color: var(--faint); font-size: 12.5px; padding: 8px 10px 4px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); padding: 0 12px 8px 0; font-weight: 640; }
+  td { padding: 10px 12px 10px 0; border-top: 1px solid var(--line); color: var(--dim); vertical-align: top; }
+  td:first-child { color: var(--text); font-weight: 500; white-space: nowrap; }
+  .pill { font-family: var(--mono); font-size: 11.5px; padding: 1px 6px; border-radius: 4px; background: var(--surface-2); }
+  .ok { color: var(--auto); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .note { border-left: 2px solid var(--accent-deep); padding: 2px 0 2px 16px; color: var(--dim); font-size: 13.5px; margin: 18px 0 0; }
+</style>
+
+<div class="wrap">
+  <h1>Fresh install</h1>
+  <p class="lede">
+    From an empty folder to pull requests in the menu bar. Two commands and two clicks;
+    everything between them happens on its own.
+  </p>
+
+  <div class="headline">
+    <div class="stat"><b>2</b><span>things you type</span></div>
+    <div class="stat"><b>2</b><span>things you click</span></div>
+    <div class="stat"><b>0</b><span>ids to copy</span></div>
+    <div class="stat"><b>~90s</b><span>start to finish</span></div>
+  </div>
+
+  <h2>The whole thing</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="num">1</div>
+      <div>
+        <span class="tag you">you</span>
+        <h3>Build it and open it</h3>
+        <p style="margin-bottom:10px">One command. Compiles the app and the relay, assembles the bundle, ad-hoc signs it, launches it.</p>
+<pre>git clone &lt;repo&gt; pull-deck &amp;&amp; cd pull-deck
+npm run mac:build &amp;&amp; open "macos/build/Pull Deck.app"</pre>
+      </div>
+    </div>
+
+    <div class="step auto">
+      <div class="num">↳</div>
+      <div>
+        <span class="tag rob">automatic</span>
+        <h3>The app starts listening</h3>
+        <p>A hollow icon appears in the menu bar. It opens its socket, scans every Chromium-family
+        browser on the Mac, finds the extension nowhere yet, and says so.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div>
+        <span class="tag you">you</span>
+        <h3>Load the extension</h3>
+        <p>Click <b>Reveal Folder</b> and <b>Open Extensions</b> in the panel. Turn on Developer mode,
+        choose Load unpacked, pick the folder. It registers under the pinned id straight away —
+        there is nothing to copy down.</p>
+      </div>
+    </div>
+
+    <div class="step auto">
+      <div class="num">↳</div>
+      <div>
+        <span class="tag rob">automatic · ≤5s</span>
+        <h3>The app installs the bridge</h3>
+        <p>The five-second scan notices the extension and writes the native messaging host manifest
+        into <em>that</em> browser — pointing at its own bundle, allowing only the pinned id.</p>
+      </div>
+    </div>
+
+    <div class="step auto">
+      <div class="num">↳</div>
+      <div>
+        <span class="tag rob">automatic · ≤60s</span>
+        <h3>The extension connects</h3>
+        <p>Its retry finds the manifest, Chrome spawns the relay, the relay attaches to the socket.
+        The icon fills in and shows a count. Impatient? <b>Retry now</b> in the extension's Settings
+        does it immediately.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <div>
+        <span class="tag you">you</span>
+        <h3>Paste a GitHub token</h3>
+        <p>In the extension popup — deliberately not in the app. The token never crosses the bridge,
+        so it lives in exactly one place. Both surfaces fill in at once.</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>Why the order doesn't matter</h2>
+  <div class="toggle" role="group">
+    <button aria-pressed="true" data-seq="app">App first</button>
+    <button aria-pressed="false" data-seq="ext">Extension first</button>
+  </div>
+  <figure>
+    <svg viewBox="0 0 820 372" role="img" aria-label="Connection handshake sequence">
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0 L10 5 L0 10 z" fill="oklch(72% 0.11 190)"/>
+        </marker>
+        <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0 L10 5 L0 10 z" fill="oklch(74% 0.13 152)"/>
+        </marker>
+      </defs>
+      <g font-family="-apple-system, system-ui, sans-serif" font-size="12.5">
+        <!-- lanes -->
+        <g id="lanes">
+          <rect x="30" y="14" width="150" height="30" rx="8" fill="oklch(26% 0.014 60)"/>
+          <text x="105" y="34" text-anchor="middle" fill="oklch(94% 0.008 60)" font-weight="600">Pull Deck.app</text>
+          <rect x="335" y="14" width="150" height="30" rx="8" fill="oklch(26% 0.014 60)"/>
+          <text x="410" y="34" text-anchor="middle" fill="oklch(94% 0.008 60)" font-weight="600">Browser</text>
+          <rect x="640" y="14" width="150" height="30" rx="8" fill="oklch(26% 0.014 60)"/>
+          <text x="715" y="34" text-anchor="middle" fill="oklch(94% 0.008 60)" font-weight="600">Relay</text>
+          <line x1="105" y1="44" x2="105" y2="352" stroke="oklch(32% 0.014 60)" stroke-dasharray="3 4"/>
+          <line x1="410" y1="44" x2="410" y2="352" stroke="oklch(32% 0.014 60)" stroke-dasharray="3 4"/>
+          <line x1="715" y1="44" x2="715" y2="352" stroke="oklch(32% 0.014 60)" stroke-dasharray="3 4"/>
+        </g>
+        <g id="seq"></g>
+      </g>
+    </svg>
+    <figcaption id="cap"></figcaption>
+  </figure>
+
+  <p class="note">
+    The arrows only ever leave the browser. A native app cannot open a connection into an extension —
+    Chrome spawns the relay itself and kills it with the port. So the app listens, and the browser
+    reaches out. That inversion is why the app treats “nothing attached” as an ordinary state
+    rather than an error.
+  </p>
+
+  <h2>What the numbers are</h2>
+  <table>
+    <tr><th>Interval</th><th>What it governs</th><th>Where</th></tr>
+    <tr><td>5 seconds</td><td>App rescans browsers and installs the manifest where the extension appeared</td><td><span class="pill">BridgeServer.swift</span></td></tr>
+    <tr><td>1 minute</td><td>Extension retry while the manifest is missing — Chrome spawned nothing, so this is nearly free</td><td><span class="pill">CHEAP_RETRY_MINUTES</span></td></tr>
+    <tr><td>0.5 → 30 min</td><td>Climbing backoff when the relay <em>did</em> run and exited, i.e. the app is closed</td><td><span class="pill">BACKOFF_MINUTES</span></td></tr>
+    <tr><td>60 seconds</td><td>Popup reuses its cached list before refetching from GitHub</td><td><span class="pill">CACHE_TTL_MS</span></td></tr>
+    <tr><td>15 minutes</td><td>Background refresh that keeps the toolbar badge current</td><td><span class="pill">REFRESH_MINUTES</span></td></tr>
+  </table>
+
+  <h2>When it doesn't work</h2>
+  <table>
+    <tr><th>Symptom</th><th>Cause</th><th>What happens</th></tr>
+    <tr>
+      <td class="warn">“Reload the extension”</td>
+      <td>Loaded before the id was pinned; Chromium keeps whatever id it had at load time</td>
+      <td>Named explicitly. Press reload on its card — <span class="ok">self-corrects</span></td>
+    </tr>
+    <tr>
+      <td class="warn">“Not running”</td>
+      <td>Bridge installed, app closed</td>
+      <td>Extension backs off up to 30 min. Open the app, hit Retry now</td>
+    </tr>
+    <tr>
+      <td class="ok">You moved the app</td>
+      <td>Manifest path went stale</td>
+      <td><span class="ok">Rewritten on next launch</span> from its own bundle path</td>
+    </tr>
+    <tr>
+      <td class="ok">You moved the repo</td>
+      <td>Used to change the extension id</td>
+      <td><span class="ok">Nothing.</span> The id is pinned by the manifest <code>key</code></td>
+    </tr>
+    <tr>
+      <td class="ok">You removed the extension</td>
+      <td>Manifest left behind</td>
+      <td><span class="ok">Cleaned up</span> on the next scan</td>
+    </tr>
+    <tr>
+      <td class="bad">Browser not detected</td>
+      <td>Something unusual about its profile layout</td>
+      <td>Run <code>--diagnose</code>; it lists every directory it considered</td>
+    </tr>
+  </table>
+
+  <h2>Checking by hand</h2>
+<pre>"macos/build/Pull Deck.app/Contents/MacOS/pulldeck-bridge" --diagnose
+
+<span class="c">● Helium                     ← filled means the pinned id is loaded here
+      loaded:   true   manifest: true
+  ○ Microsoft Edge             ← hollow means it is simply not there</span></pre>
+</div>
+
+<script>
+  const sequences = {
+    app: {
+      caption: 'You open the app before loading the extension. It waits, scanning, until the extension shows up.',
+      rows: [
+        ['app', 'App opens its socket and starts scanning', 'a'],
+        ['you', 'You load the extension', 'you'],
+        ['app', 'Scan spots it — writes the host manifest', 'a', '≤5s'],
+        ['ext', 'Extension retries connectNative', 'g', '≤60s'],
+        ['spawn', 'Chrome spawns the relay', 'g'],
+        ['attach', 'Relay attaches to the socket', 'g'],
+      ],
+    },
+    ext: {
+      caption: 'You load the extension before opening the app. Its first attempts fail harmlessly until the app arrives.',
+      rows: [
+        ['you', 'You load the extension', 'you'],
+        ['ext', 'connectNative — no manifest yet, retries in 1 min', 'g'],
+        ['app', 'App opens, scans, writes the manifest immediately', 'a'],
+        ['ext', 'Next retry succeeds', 'g', '≤60s'],
+        ['spawn', 'Chrome spawns the relay', 'g'],
+        ['attach', 'Relay attaches to the socket', 'g'],
+      ],
+    },
+  };
+
+  const seq = document.getElementById('seq');
+  const cap = document.getElementById('cap');
+  const NS = 'http://www.w3.org/2000/svg';
+
+  function el(name, attrs, text) {
+    const n = document.createElementNS(NS, name);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  function render(which) {
+    seq.replaceChildren();
+    const { rows, caption } = sequences[which];
+    cap.textContent = caption;
+
+    rows.forEach((row, i) => {
+      const [kind, label, colour, timing] = row;
+      const y = 76 + i * 46;
+      const accent = colour === 'g' ? 'oklch(74% 0.13 152)' : 'oklch(72% 0.11 190)';
+
+      // Geometry per message kind.
+      let x1 = 105, x2 = 410, dash = '';
+      if (kind === 'app') { x1 = 105; x2 = 105; }
+      if (kind === 'you') { x1 = 410; x2 = 410; }
+      if (kind === 'ext') { x1 = 410; x2 = 105; }
+      if (kind === 'spawn') { x1 = 410; x2 = 715; }
+      if (kind === 'attach') { x1 = 715; x2 = 105; }
+
+      if (x1 === x2) {
+        seq.appendChild(el('circle', { cx: x1, cy: y, r: 5, fill: accent }));
+        seq.appendChild(el('text', {
+          x: x1 + 14, y: y + 4, fill: 'oklch(88% 0.008 60)',
+        }, label));
+      } else {
+        seq.appendChild(el('line', {
+          x1, y1: y, x2, y2: y, stroke: accent, 'stroke-width': 1.6,
+          'marker-end': `url(#${colour})`, 'stroke-dasharray': dash,
+        }));
+        const mid = (x1 + x2) / 2;
+        seq.appendChild(el('text', {
+          x: mid, y: y - 9, 'text-anchor': 'middle', fill: 'oklch(88% 0.008 60)',
+        }, label));
+      }
+
+      if (timing) {
+        seq.appendChild(el('text', {
+          x: 800, y: y + 4, 'text-anchor': 'end', fill: 'oklch(58% 0.012 60)', 'font-size': 11,
+        }, timing));
+      }
+    });
+
+    // Landing state.
+    const y = 76 + rows.length * 46;
+    seq.appendChild(el('rect', {
+      x: 30, y: y - 15, width: 760, height: 30, rx: 8,
+      fill: 'color-mix(in oklab, oklch(22% 0.013 60), oklch(74% 0.13 152) 12%)',
+    }));
+    seq.appendChild(el('text', {
+      x: 410, y: y + 4, 'text-anchor': 'middle', fill: 'oklch(74% 0.13 152)', 'font-weight': 600,
+    }, 'Connected — identical either way'));
+  }
+
+  document.querySelectorAll('.toggle button').forEach((button) => {
+    button.addEventListener('click', () => {
+      document.querySelectorAll('.toggle button').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b === button))
+      );
+      render(button.dataset.seq);
+    });
+  });
+
+  render('app');
+</script>
