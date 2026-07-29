@@ -163,6 +163,13 @@
         return { ok: true, data: listPayload() };
       }
 
+      if (message.type === 'bridge' || message.type === 'bridgeRetry') {
+        return {
+          ok: true,
+          data: { connected: false, reason: 'Specified native messaging host not found.' },
+        };
+      }
+
       if (message.type === 'settings') {
         Object.assign(settings, message.patch ?? {});
         if (message.patch?.token === null) {

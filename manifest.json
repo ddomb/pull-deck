@@ -24,6 +24,15 @@
     "service_worker": "src/service-worker.js",
     "type": "module"
   },
-  "permissions": ["tabs", "tabGroups", "storage", "alarms", "nativeMessaging"],
-  "host_permissions": ["https://api.github.com/*"]
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "storage",
+    "alarms",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "https://api.github.com/*"
+  ],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlobd13ktAuxqs/MC+WNhhyMIx3iKkjIEYzFBf5NFDsVAZ9NCd2XHV3NttXv3+neBwNlozIvxb6bJqudIgaTYgL26LLz+7txHB8BuVpVjCTyrnmoNv8yC58oF/4uME4QkzoVhzjZ3bbgcfluQ+gaq8Z7zUIgYfeB6y8QhUGIj678vN8yJbRvscp29KqDhD5OQtCZU3X1xDquSInQBK0FWfn70zLiaAd/WtCdzbtNdJQGA/UkFq/uJHO9Y/976Ot+7wGYhEPWfhJComw2N5TkU4rKeOrdWKg6iTE8zhCJB95bZMExHtpdu03LicuWaUFhVUZqqqCjfTQXLSmQxO7kpBwIDAQAB"
 }

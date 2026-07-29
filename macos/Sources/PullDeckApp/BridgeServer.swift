@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import PullDeckKit
 
 /// Owns the Unix socket the relay attaches to, and everything the UI renders.
@@ -14,6 +15,8 @@ final class BridgeServer: ObservableObject {
     @Published private(set) var isAttached = false
     @Published private(set) var progress: ProgressEvent?
     @Published private(set) var lastFailure: String?
+    @Published private(set) var setup: [HostInstaller.Status] = []
+    @Published private(set) var relayPath: String?
     @Published var scope: Scope = .mine
 
     private var listenFD: Int32 = -1
@@ -25,6 +28,8 @@ final class BridgeServer: ObservableObject {
     /// only once the connection closes — the app attaches and then goes mute.
     private let acceptQueue = DispatchQueue(label: "com.pulldeck.bridge.accept")
     private let writeQueue = DispatchQueue(label: "com.pulldeck.bridge.write")
+    private let installQueue = DispatchQueue(label: "com.pulldeck.hosts")
+    private var pollTimer: Timer?
     private let socketPath: String
 
     /// One listener per process, started at launch rather than when the panel
@@ -50,12 +55,57 @@ final class BridgeServer: ObservableObject {
         // traps rather than blocks when the assumption is false.
         let fd = listenFD
         acceptQueue.async { [weak self] in self?.acceptLoop(listening: fd) }
+
+        relayPath = HostInstaller.relayPathInBundle()
+        reconcileHosts()
+        // Keep watching while nothing is attached: the extension may be loaded
+        // into a browser minutes from now, and the manifest has to be waiting
+        // when it is or the first connectNative fails for nothing.
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.reconcileHosts() }
+        }
+    }
+
+    /// Install the host manifest wherever the extension actually lives, and
+    /// remove ones left behind where it no longer does. Idempotent and cheap.
+    func reconcileHosts() {
+        guard let relay = relayPath else { return }
+        // These preference files run to several megabytes; keep them off main.
+        installQueue.async {
+            let statuses = HostInstaller.reconcile(relayPath: relay)
+            Task { @MainActor in self.setup = statuses }
+        }
     }
 
     func stop() {
+        pollTimer?.invalidate()
+        pollTimer = nil
         if clientFD >= 0 { close(clientFD) }
         if listenFD >= 0 { close(listenFD) }
         unlink(socketPath)
+    }
+
+    // MARK: - Setup state
+
+    /// Browsers that actually have the extension loaded.
+    var browsersWithExtension: [HostInstaller.Status] { setup.filter(\.extensionLoaded) }
+    var extensionFound: Bool { !browsersWithExtension.isEmpty }
+    var bridgeInstalled: Bool { setup.contains(where: \.ready) }
+
+    /// Chrome will not open a `chrome://` URL handed to it by another app, but
+    /// it does accept one on its command line.
+    func openExtensionsPage() {
+        let browser = browsersWithExtension.first?.browser.name ?? "Google Chrome"
+        let appName = browser == "Chrome" ? "Google Chrome" : browser
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        task.arguments = ["-a", appName, "chrome://extensions"]
+        try? task.run()
+    }
+
+    func revealExtensionFolder() {
+        guard let path = HostInstaller.extensionSourcePath() else { return }
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
     }
 
     private nonisolated func acceptLoop(listening listenFD: Int32) {

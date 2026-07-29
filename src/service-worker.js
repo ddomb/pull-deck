@@ -19,7 +19,14 @@ import {
   onProgress,
   serializeError,
 } from './app-state.js';
-import { ensureBridge, isReconnectAlarm, reconnect, pushState } from './bridge.js';
+import {
+  ensureBridge,
+  isReconnectAlarm,
+  reconnect,
+  pushState,
+  bridgeStatus,
+  connectNow,
+} from './bridge.js';
 
 const REFRESH_ALARM = 'pull-deck-refresh';
 const REFRESH_MINUTES = 15;
@@ -46,6 +53,10 @@ async function handle(message) {
       return openOne(message.pullRequest);
     case 'settings':
       return applySettings(message.patch ?? {});
+    case 'bridge':
+      return bridgeStatus();
+    case 'bridgeRetry':
+      return connectNow();
     default:
       throw new Error(`Unknown message: ${message?.type}`);
   }

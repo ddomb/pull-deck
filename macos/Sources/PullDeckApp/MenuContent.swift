@@ -15,11 +15,7 @@ struct MenuContent: View {
             Divider()
 
             if !bridge.isAttached {
-                notice(
-                    symbol: "bolt.horizontal.circle",
-                    title: "Chrome not connected",
-                    body: "Open Chrome with the Pull Deck extension loaded. It reaches out on its own; this window will fill in."
-                )
+                setupChecklist
             } else if bridge.state?.needsToken == true {
                 notice(
                     symbol: "key",
@@ -246,6 +242,73 @@ struct MenuContent: View {
             return "\(already) already there, so \(already == 1 ? "it stays" : "they stay") put."
         }
         return " "
+    }
+
+    // MARK: - Setup
+
+    /// Names the step that is actually incomplete. The generic "not connected"
+    /// this replaced was indistinguishable across three unrelated causes.
+    private var setupChecklist: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Not connected yet")
+                .font(.system(size: 13, weight: .semibold))
+
+            VStack(alignment: .leading, spacing: 7) {
+                step(
+                    done: bridge.extensionFound,
+                    title: bridge.extensionFound
+                        ? "Extension loaded in \(bridge.browsersWithExtension.map(\.browser.name).joined(separator: ", "))"
+                        : "Load the extension in your browser"
+                )
+                step(
+                    done: bridge.bridgeInstalled,
+                    title: bridge.bridgeInstalled
+                        ? "Bridge installed"
+                        : "Bridge installs itself once the extension is loaded"
+                )
+                step(
+                    done: false,
+                    title: bridge.bridgeInstalled
+                        ? "Waiting for the extension to reconnect…"
+                        : "Waiting"
+                )
+            }
+
+            if !bridge.extensionFound {
+                HStack(spacing: 8) {
+                    Button("Open Extensions") { bridge.openExtensionsPage() }
+                    if HostInstaller.extensionSourcePath() != nil {
+                        Button("Reveal Folder") { bridge.revealExtensionFolder() }
+                    }
+                }
+                .controlSize(.small)
+
+                Text("Turn on Developer mode, choose Load unpacked, and pick the revealed folder. The bridge is installed automatically the moment it appears.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if bridge.bridgeInstalled {
+                Text("If this persists, open the extension and use Retry now — it may still be waiting out a backoff.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
+    }
+
+    private func step(done: Bool, title: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(done ? accent : Color.secondary)
+                .font(.system(size: 11))
+            Text(title)
+                .font(.system(size: 11.5))
+                .foregroundStyle(done ? Color.primary : Color.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
     }
 
     // MARK: - Notices

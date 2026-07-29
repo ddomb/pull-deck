@@ -65,6 +65,10 @@ const dom = {
   groupName: $('group-name'),
   swatches: $('swatches'),
   badgeSwitch: $('badge-switch'),
+  bridgeIcon: $('bridge-icon'),
+  bridgeStatus: $('bridge-status'),
+  bridgeHelp: $('bridge-help'),
+  bridgeRetry: $('bridge-retry'),
   tokenOwner: $('token-owner'),
   tokenFingerprint: $('token-fingerprint'),
   tokenIcon: $('token-icon'),
@@ -600,11 +604,42 @@ function glyphCheck() {
 
 /* ---------------------------------------------------------------- settings -- */
 
+/** Explains the actual reason, using the error string Chrome handed back. */
+function renderBridge(status) {
+  const connected = Boolean(status?.connected);
+  const reason = status?.reason ?? '';
+  dom.bridgeIcon.replaceChildren(glyph(connected ? icons.inGroup : icons.alert));
+  dom.bridgeIcon.style.color = connected ? 'var(--accent)' : 'var(--text-tertiary)';
+  dom.bridgeRetry.hidden = connected;
+
+  if (connected) {
+    dom.bridgeStatus.textContent = 'Connected';
+    dom.bridgeHelp.textContent = 'Pull Deck.app is showing these pull requests in the menu bar.';
+  } else if (/not found|forbidden/i.test(reason)) {
+    dom.bridgeStatus.textContent = 'Not installed';
+    dom.bridgeHelp.textContent =
+      'Open Pull Deck.app. It installs the bridge itself, then this connects within a minute.';
+  } else if (reason) {
+    dom.bridgeStatus.textContent = 'Not running';
+    dom.bridgeHelp.textContent = 'The bridge is installed, but Pull Deck.app is not open.';
+  } else {
+    dom.bridgeStatus.textContent = 'Not connected';
+    dom.bridgeHelp.textContent = 'Open Pull Deck.app to use the menu bar.';
+  }
+}
+
+function refreshBridge(retry = false) {
+  send({ type: retry ? 'bridgeRetry' : 'bridge' })
+    .then(renderBridge)
+    .catch(() => renderBridge(null));
+}
+
 function openSettings() {
   // render() bails before renderSettings() on any non-list stage, but the panel
   // is reachable from the error screen. Without this the colour picker is empty
   // and the controls show HTML defaults that overwrite real settings on change.
   renderSettings();
+  refreshBridge();
   dom.settings.setAttribute('data-open', '');
   dom.settings.setAttribute('aria-hidden', 'false');
   dom.closeSettings.focus();
@@ -737,6 +772,11 @@ function wire() {
     state.settings.badgeEnabled = badgeEnabled;
     dom.badgeSwitch.setAttribute('aria-checked', String(badgeEnabled));
     send({ type: 'settings', patch: { badgeEnabled } }).catch(showFatal);
+  });
+
+  dom.bridgeRetry.addEventListener('click', () => {
+    dom.bridgeStatus.textContent = 'Connecting…';
+    refreshBridge(true);
   });
 
   dom.forgetToken.addEventListener('click', async () => {

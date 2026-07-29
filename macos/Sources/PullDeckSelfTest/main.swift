@@ -196,6 +196,79 @@ let samplePR = PullRequest(
 check("scopes subscript matches wire names",
       Scopes(mine: [samplePR], reviewing: [], assigned: [])[.mine].count == 1)
 
+// MARK: - Host installer, against a real profile tree on disk
+
+do {
+    let fm = FileManager.default
+    let root = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("pulldeck-installer-\(ProcessInfo.processInfo.processIdentifier)")
+    defer { try? fm.removeItem(at: root) }
+
+    /// Writes a profile whose Secure Preferences may or may not list our id.
+    func makeProfile(_ browser: String, profile: String, loaded: Bool) throws {
+        let dir = root.appendingPathComponent(browser).appendingPathComponent(profile)
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        var settings: [String: Any] = ["someotherextensionidaaaaaaaaaaaa": ["path": "/tmp/other"]]
+        if loaded {
+            settings[HostInstaller.extensionID] = ["path": "/Users/ddomb/pull-deck", "state": 1]
+        }
+        let payload: [String: Any] = ["extensions": ["settings": settings]]
+        // Extensions live in "Secure Preferences", not "Preferences".
+        try JSONSerialization.data(withJSONObject: payload)
+            .write(to: dir.appendingPathComponent("Secure Preferences"))
+    }
+
+    try makeProfile("Google/Chrome", profile: "Default", loaded: false)
+    try makeProfile("Google/Chrome", profile: "Profile 6", loaded: true)
+    try makeProfile("Microsoft Edge", profile: "Default", loaded: false)
+    try makeProfile("Vivaldi", profile: "Default", loaded: false)
+
+    let browsers = HostInstaller.discover(root: root)
+    check("discovers every browser with profiles", browsers.count == 3,
+          browsers.map(\.name).joined(separator: ","))
+    check("discovers them by name", Set(browsers.map(\.name)) == Set(["Chrome", "Edge", "Vivaldi"]))
+
+    let chrome = browsers.first { $0.name == "Chrome" }!
+    let edge = browsers.first { $0.name == "Edge" }!
+    check("finds the extension in a non-default profile", HostInstaller.isExtensionLoaded(in: chrome))
+    check("and does not invent it where it is absent", !HostInstaller.isExtensionLoaded(in: edge))
+
+    let relay = "/Applications/Pull Deck.app/Contents/MacOS/pulldeck-bridge"
+    var result = HostInstaller.reconcile(relayPath: relay, root: root)
+
+    check("installs only where the extension actually is",
+          result.filter(\.manifestPresent).map(\.browser.name) == ["Chrome"],
+          result.filter(\.manifestPresent).map(\.browser.name).joined(separator: ","))
+    check("and reports it ready", result.first { $0.browser.name == "Chrome" }?.ready == true)
+
+    let written = HostInstaller.readManifest(at: chrome.manifestURL)
+    check("manifest names the relay absolutely", written?["path"] as? String == relay)
+    check("manifest allows exactly the pinned id",
+          (written?["allowed_origins"] as? [String]) == ["chrome-extension://\(HostInstaller.extensionID)/"])
+    check("manifest type is stdio", written?["type"] as? String == "stdio")
+
+    // Moving the app must self-heal rather than silently break.
+    let moved = "/Users/ddomb/Applications/Pull Deck.app/Contents/MacOS/pulldeck-bridge"
+    result = HostInstaller.reconcile(relayPath: moved, root: root)
+    check("a moved app rewrites the stale path",
+          HostInstaller.readManifest(at: chrome.manifestURL)?["path"] as? String == moved)
+    check("and is ready again", result.first { $0.browser.name == "Chrome" }?.ready == true)
+
+    // Reconcile is idempotent.
+    let before = try Data(contentsOf: chrome.manifestURL)
+    _ = HostInstaller.reconcile(relayPath: moved, root: root)
+    check("reconcile is idempotent", try Data(contentsOf: chrome.manifestURL) == before)
+
+    // Remove the extension from Chrome: the manifest we left behind is stale.
+    try makeProfile("Google/Chrome", profile: "Profile 6", loaded: false)
+    result = HostInstaller.reconcile(relayPath: moved, root: root)
+    check("removes a manifest once the extension is gone",
+          !fm.fileExists(atPath: chrome.manifestURL.path))
+    check("and reports nothing ready", result.allSatisfy { !$0.ready })
+} catch {
+    check("host installer suite ran", false, "threw \(error)")
+}
+
 // MARK: - Summary
 
 print("1..\(checks)")

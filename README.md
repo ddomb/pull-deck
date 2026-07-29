@@ -20,6 +20,8 @@ open -a "Google Chrome" --args --new-window "chrome://extensions"
 3. Choose this folder: `/Users/ddomb/pull-deck`
 4. Pin Pull Deck to the toolbar so the badge count is visible.
 
+The extension id is pinned to `jdpikjmmmljjpkmfmhgildnaihbpmfpj` by the `key` field in `manifest.json`, so it is stable across machines and paths. Regenerate that identity with `node tools/make-extension-key.mjs --force` — which invalidates every installed host manifest, so only do it deliberately.
+
 Works the same in Edge (`edge://extensions`) and Brave (`brave://extensions`). Needs **Chrome 99+**: `chrome.tabGroups` shipped in 89, but `chrome.runtime.sendMessage` only started returning a promise in 99, and every call here is awaited.
 
 ## Connect a token
@@ -121,21 +123,36 @@ src/icons.js           The 16px icon set
 
 **The app holds no secrets and knows no URLs.** It has no GitHub token, no GitHub client, and no copy of the pull-request identity rule. It names a scope (`mine` / `reviewing` / `assigned`); the extension resolves that against its own cache and calls the same `openIntoGroup()` the popup uses. See [BRIDGE.md](BRIDGE.md) for the protocol and the reasoning.
 
-### Build and install
+### Install
 
 ```bash
 npm run mac:build
+open "macos/build/Pull Deck.app"
 ```
 
-Then register the relay with Chrome, using the extension id from `chrome://extensions`:
+That is the whole thing. The app installs the native messaging host itself, into whichever browsers actually have the extension loaded, and re-checks every few seconds while it is not connected. Load the extension whenever you like — before or after opening the app — and the two find each other within about a minute.
+
+Add the app to Login Items to have it start with the Mac.
+
+**Why there is nothing to paste.** The extension id is pinned by the `key` field in `manifest.json`, so it is the same on every machine and survives the repo moving. Without it Chrome derives the id from the absolute path — `SHA-256("/Users/you/pull-deck")` — so relocating the repo silently changed the id and broke every manifest naming the old one.
+
+**Why it keeps working.** Three things used to break it silently, all of which looked identical from the outside:
+
+| Used to break | Now |
+| --- | --- |
+| Repo moves → id changes | Id is pinned, so it does not |
+| App moves or is rebuilt → `path` goes stale | Rewritten from the app's own bundle path each launch |
+| Manifest installed in a browser you do not use | Installed only where the extension is loaded, and removed when it is not |
+
+The app's setup panel names the step that is actually incomplete rather than saying "not connected", and the extension's Settings has a **Menu bar app** row with a **Retry now** button for skipping any pending backoff.
 
 ```bash
-cd macos && ./install-host.sh <extension-id>
+cd macos
+./install-host.sh              # same thing, from a terminal
+./install-host.sh --uninstall  # remove it everywhere
 ```
 
-Open `macos/build/Pull Deck.app` and reload the extension. It reconnects on its own — within 30 seconds if it had already backed off. Add the app to Login Items to have it start with the Mac.
-
-`./install-host.sh <extension-id> edge` targets Edge instead. Brave uses a different directory that has no official documentation, so it is not wired up.
+Both call straight into the app's own installer, so the command line and the GUI cannot drift apart.
 
 Requires macOS 13+ (`MenuBarExtra`). Builds with Command Line Tools; full Xcode is not needed.
 

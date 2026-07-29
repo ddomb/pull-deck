@@ -24,13 +24,26 @@ const HOST_NAME = 'com.pulldeck.bridge';
 const RECONNECT_ALARM = 'pull-deck-bridge-reconnect';
 const PROTOCOL_VERSION = 1;
 
-// Backoff in minutes. Chrome's alarm floor is 30 seconds, and the tail is long
-// because the overwhelmingly common reason for failure is "the menu bar app was
-// never installed" — that should cost almost nothing, forever.
+// Two different failures deserve two different retry policies, and Chrome's
+// error strings tell them apart:
+//
+//   "Specified native messaging host not found."  — no manifest, so Chrome
+//   "Access to the ... host is forbidden."           spawned nothing at all.
+//
+// Those cost a file lookup. Since the menu bar app installs the manifest as
+// soon as it sees the extension, retrying promptly is what closes the setup
+// loop without the user reloading anything.
+//
+// Anything else means the relay actually ran and then went away (usually: the
+// app is not running). That is a real process spawn per attempt, so it earns a
+// climbing backoff.
+const CHEAP_RETRY_MINUTES = 1;
 const BACKOFF_MINUTES = [0.5, 1, 2, 5, 15, 30];
+const NOTHING_SPAWNED = /not found|forbidden/i;
 
 let port = null;
 let attempt = 0;
+let lastReason = null;
 let detachProgress = null;
 
 /** Idempotent: safe to call on every service worker start. */
@@ -63,8 +76,9 @@ function openPort() {
     // clean shutdown, and it is only readable inside this handler.
     const reason = chrome.runtime.lastError?.message;
     if (reason) console.info('Pull Deck bridge: disconnected —', reason);
+    lastReason = reason ?? null;
     teardown();
-    scheduleReconnect();
+    scheduleReconnect(reason);
   });
 
   detachProgress = onProgress((event) => post({ type: 'progress', ...event }));
@@ -81,10 +95,29 @@ function teardown() {
   }
 }
 
-function scheduleReconnect() {
+function scheduleReconnect(reason) {
+  if (NOTHING_SPAWNED.test(reason ?? '')) {
+    // Do not advance the ladder: once the manifest appears and the relay really
+    // runs, the escalating backoff should start from the beginning.
+    chrome.alarms.create(RECONNECT_ALARM, { delayInMinutes: CHEAP_RETRY_MINUTES });
+    return;
+  }
   const delayInMinutes = BACKOFF_MINUTES[Math.min(attempt, BACKOFF_MINUTES.length - 1)];
   attempt += 1;
   chrome.alarms.create(RECONNECT_ALARM, { delayInMinutes });
+}
+
+/** What the popup shows, and why it is not connected. */
+export function bridgeStatus() {
+  return { connected: Boolean(port), reason: lastReason };
+}
+
+/** Skip whatever backoff is pending and try right now. */
+export function connectNow() {
+  chrome.alarms.clear(RECONNECT_ALARM);
+  attempt = 0;
+  if (!port) openPort();
+  return bridgeStatus();
 }
 
 /** Wired from the service worker's single alarm listener. */

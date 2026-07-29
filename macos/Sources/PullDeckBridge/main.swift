@@ -16,9 +16,45 @@ func log(_ message: String) {
 }
 
 // argv[1] is "the origin of the caller, usually chrome-extension://[ID]".
+let callerOrigin = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "(none)"
+
+// Scripted install path. Chrome only ever passes a chrome-extension:// origin,
+// so this flag cannot collide with a real launch. Sharing the app's installer
+// keeps the command line and the GUI from drifting apart.
+if callerOrigin == "--install-hosts" || callerOrigin == "--uninstall-hosts" {
+    let uninstalling = callerOrigin == "--uninstall-hosts"
+    guard let relay = HostInstaller.relayPathInBundle() else {
+        print("Could not locate the relay inside the app bundle.")
+        exit(1)
+    }
+    if uninstalling {
+        for browser in HostInstaller.discover() {
+            try? HostInstaller.uninstall(from: browser)
+        }
+        print("Removed the Pull Deck host manifest from every browser.")
+        exit(0)
+    }
+    let statuses = HostInstaller.reconcile(relayPath: relay)
+    let ready = statuses.filter(\.ready)
+    if ready.isEmpty {
+        print("Pull Deck is not loaded in any browser yet, so there is nowhere to install.")
+        print("Load it, then run this again — or just leave the app running and it will")
+        print("install itself the moment the extension appears.")
+        exit(1)
+    }
+    for entry in ready {
+        print("installed for \(entry.browser.name)  ->  \(entry.browser.manifestURL.path)")
+    }
+    print("\nextension id: \(HostInstaller.extensionID)")
+    exit(0)
+}
+
 // Chrome already enforces allowed_origins before launching us; this is a
 // belt-and-braces check and is logged rather than trusted as security.
-let callerOrigin = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "(none)"
+if callerOrigin != "(none)",
+   !callerOrigin.contains(HostInstaller.extensionID) {
+    log("warning: launched by an unexpected origin \(callerOrigin)")
+}
 log("launched by \(callerOrigin)")
 
 let socketPath = ProcessInfo.processInfo.environment["PULLDECK_SOCKET"] ?? UnixSocket.defaultPath

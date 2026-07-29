@@ -10,7 +10,7 @@ let instance = 0;
 const freshBridge = () => import(`../src/bridge.js?case=${instance++}`);
 
 function fakeChrome({ store = {}, connectThrows = false } = {}) {
-  const calls = { alarms: [], posted: [], connects: 0, hostName: null };
+  const calls = { alarms: [], cleared: [], posted: [], connects: 0, hostName: null };
   const listeners = { message: [], disconnect: [] };
   let lastError;
 
@@ -34,7 +34,13 @@ function fakeChrome({ store = {}, connectThrows = false } = {}) {
       },
       sendMessage: async () => {},
     },
-    alarms: { create: (name, opts) => calls.alarms.push({ name, ...opts }) },
+    alarms: {
+      create: (name, opts) => calls.alarms.push({ name, ...opts }),
+      clear: async (name) => {
+        calls.cleared.push(name);
+        return true;
+      },
+    },
     storage: {
       local: {
         get: async (keys) => {
@@ -88,20 +94,87 @@ test('ensureBridge is idempotent', async () => {
   assert.equal(h.calls.connects, 1, 'one live port, however many service worker wakeups');
 });
 
-test('a disconnect schedules a reconnect', async () => {
+test('a missing host manifest retries promptly and does not climb', async () => {
+  // Chrome spawned nothing, so a retry costs a file lookup. Retrying steadily
+  // is what lets the menu bar app install the manifest and have the extension
+  // pick it up without the user reloading anything.
   const h = fakeChrome();
   const bridge = await freshBridge();
-  bridge.ensureBridge();
-  await settle();
 
-  h.setLastError({ message: 'Specified native messaging host not found.' });
-  h.listeners.disconnect.forEach((fn) => fn());
+  for (let i = 0; i < 4; i++) {
+    bridge.reconnect();
+    await settle();
+    h.setLastError({ message: 'Specified native messaging host not found.' });
+    h.listeners.disconnect.at(-1)();
+  }
 
-  assert.equal(h.calls.alarms.length, 1);
+  assert.deepEqual(
+    h.calls.alarms.map((a) => a.delayInMinutes),
+    [1, 1, 1, 1],
+    'a flat, cheap interval — never a 30 minute wait for a manifest that just appeared'
+  );
   assert.equal(h.calls.alarms[0].name, 'pull-deck-bridge-reconnect');
-  assert.equal(h.calls.alarms[0].delayInMinutes, 0.5, 'first retry is prompt');
   assert.ok(bridge.isReconnectAlarm('pull-deck-bridge-reconnect'));
   assert.ok(!bridge.isReconnectAlarm('pull-deck-refresh'));
+});
+
+test('a forbidden origin is also treated as cheap', async () => {
+  // Same situation: Chrome refused before launching anything. The app rewrites
+  // allowed_origins on its own, so steady retries close that loop too.
+  const h = fakeChrome();
+  const bridge = await freshBridge();
+  bridge.reconnect();
+  await settle();
+  h.setLastError({ message: 'Access to the specified native messaging host is forbidden.' });
+  h.listeners.disconnect.at(-1)();
+
+  assert.equal(h.calls.alarms.at(-1).delayInMinutes, 1);
+});
+
+test('a host that ran and exited earns a climbing backoff', async () => {
+  // Here Chrome really did spawn the relay, so each attempt costs a process.
+  const h = fakeChrome();
+  const bridge = await freshBridge();
+
+  for (let i = 0; i < 4; i++) {
+    bridge.reconnect();
+    await settle();
+    h.setLastError({ message: 'Native host has exited.' });
+    h.listeners.disconnect.at(-1)();
+  }
+
+  assert.deepEqual(h.calls.alarms.map((a) => a.delayInMinutes), [0.5, 1, 2, 5]);
+});
+
+test('connectNow skips a pending backoff', async () => {
+  const h = fakeChrome();
+  const bridge = await freshBridge();
+  bridge.reconnect();
+  await settle();
+  h.setLastError({ message: 'Native host has exited.' });
+  h.listeners.disconnect.at(-1)();
+  const connectsBefore = h.calls.connects;
+
+  const status = bridge.connectNow();
+
+  assert.equal(h.calls.connects, connectsBefore + 1, 'reconnects immediately');
+  assert.deepEqual(h.calls.cleared, ['pull-deck-bridge-reconnect'], 'and cancels the pending alarm');
+  assert.equal(status.connected, true);
+});
+
+test('bridgeStatus reports why it is not connected', async () => {
+  const h = fakeChrome();
+  const bridge = await freshBridge();
+  bridge.reconnect();
+  await settle();
+  assert.equal(bridge.bridgeStatus().connected, true);
+
+  h.setLastError({ message: 'Specified native messaging host not found.' });
+  h.listeners.disconnect.at(-1)();
+
+  const status = bridge.bridgeStatus();
+  assert.equal(status.connected, false);
+  assert.match(status.reason, /not found/, 'the popup can explain the actual cause');
 });
 
 test('repeated failures back off and then cap', async () => {

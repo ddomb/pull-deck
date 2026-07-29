@@ -30,7 +30,11 @@ if [ -f ../icons/icon128.png ]; then
   cp ../icons/icon128.png "$RES_DIR/icon.png"
 fi
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+# Where the extension lives, so the app can reveal it in Finder during setup.
+# It has no other way to know where this repo was cloned.
+EXTENSION_PATH="$(cd .. && pwd)"
+
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -46,6 +50,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <!-- Menu bar only: no Dock icon, no app switcher entry. -->
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
+  <key>PDExtensionPath</key><string>$EXTENSION_PATH</string>
 </dict>
 </plist>
 PLIST
@@ -57,6 +62,7 @@ codesign --force --deep --sign - "$APP" 2>/dev/null || echo "    (codesign unava
 
 echo
 echo "Built: $(pwd)/$APP"
-echo "Relay: $(pwd)/$BIN_DIR/pulldeck-bridge"
 echo
-echo "Next: ./install-host.sh <extension-id>"
+echo "Next: open \"$APP\""
+echo "It installs the bridge itself, into whichever browsers have the extension"
+echo "loaded. Nothing else to run."
