@@ -290,10 +290,13 @@ async function start() {
   state.all = result.all ?? [];
   render(result);
 
-  // Focus the field, caret at the end: the common case after a miss is fixing
-  // a typo, not retyping the whole thing.
-  dom.input.focus();
-  dom.input.setSelectionRange(query.length, query.length);
+  // Focus the field, caret at the end: the common case after a miss is fixing a
+  // typo, not retyping the whole thing. The states with nothing to search hide
+  // the field entirely, and focusing a display:none input is at best a no-op.
+  if (dom.finder.offsetParent !== null) {
+    dom.input.focus();
+    dom.input.setSelectionRange(query.length, query.length);
+  }
 }
 
 wire();

@@ -150,8 +150,13 @@ async function routeShortcut(tabId, query) {
 
   // Already open somewhere: go to that tab instead of making a second one.
   // Duplicating is the single thing this extension exists to not do.
-  await focusTab(open);
-  await dismissTab(tabId, target);
+  //
+  // Closing the tab the user typed into is only safe once they are demonstrably
+  // somewhere else. If focusing the existing tab failed — it was closed in the
+  // last few milliseconds, its window went away — closing this one too would
+  // leave them nowhere, having asked to be taken somewhere.
+  if (await focusTab(open)) await dismissTab(tabId, target);
+  else await chrome.tabs.update(tabId, { url: target });
 }
 
 /** The tab already showing this pull request, by identity rather than URL. */
@@ -164,12 +169,14 @@ async function findOpenTab(url, exceptTabId) {
   );
 }
 
+/** @returns {Promise<boolean>} whether the user is now actually looking at it. */
 async function focusTab(tab) {
   try {
     await chrome.tabs.update(tab.id, { active: true });
     if (tab.windowId !== undefined) await chrome.windows.update(tab.windowId, { focused: true });
+    return true;
   } catch {
-    // Tab closed between finding and focusing it; the fallback below still runs.
+    return false; // closed between finding it and focusing it
   }
 }
 
@@ -195,6 +202,21 @@ async function dismissTab(tabId, fallbackUrl) {
   }
 }
 
+/**
+ * The query goes in the URL and the page resolves it a second time, rather than
+ * the matches being handed over directly. That is deliberate: the page then
+ * survives a reload, and a service worker torn down between the two calls
+ * changes nothing. The second call is cheap — `resolveShortcut` reads the same
+ * cache, and its one throttle-bypassing refetch cannot fire twice because the
+ * first call is what put `headRefName` in the cache.
+ *
+ * No web_accessible_resources entry: the extension navigating its own tab to
+ * its own page is not a web-originated load, and declaring it would let any
+ * site probe for this extension by fetching the page. If a miss ever lands on a
+ * blank tab rather than here, that reasoning was wrong — add resolve.html to
+ * web_accessible_resources with `matches` limited to SHORTCUT_HOSTS, which are
+ * hosts no real page can ever be served from.
+ */
 function showChooser(tabId, query) {
   const url = `${chrome.runtime.getURL('src/resolve.html')}?q=${encodeURIComponent(query)}`;
   return chrome.tabs.update(tabId, { url });
