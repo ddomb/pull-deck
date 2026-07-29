@@ -1,0 +1,227 @@
+/* The shortcut page. Layered on popup.css, which owns every token and the row,
+   badge and notice components — this file only reshapes the container.
+
+   popup.css pins the body to 400×580 because a popup has no other way to say
+   how big it is. This page is a full tab, so that has to come off first. */
+
+body {
+  width: auto;
+  height: auto;
+  min-height: 100vh;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  padding: clamp(var(--space-2xl), 9vh, 88px) var(--space-lg) var(--space-3xl);
+}
+
+.sheet {
+  width: min(100%, 620px);
+  display: grid;
+  gap: var(--space-lg);
+  animation: sheet-in var(--dur-slow) var(--ease-out-expo) both;
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* ------------------------------------------------------------------ head -- */
+
+.sheet-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.sheet-mark {
+  border-radius: var(--radius-md);
+  /* The icon is drawn edge to edge; a hairline keeps it from bleeding into a
+     light background without adding a visible frame. */
+  box-shadow: 0 0 0 var(--hairline) var(--hairline-color);
+}
+
+.sheet-copy {
+  min-width: 0;
+}
+
+.sheet-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.021em;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.sheet-sub {
+  margin: 2px 0 0;
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+}
+
+/* The shorthand as typed, quoted back so a typo is obvious at a glance. */
+.sheet-sub code,
+.sheet-foot code {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 0.92em;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--chip-bg);
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------------- finder -- */
+
+.finder {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 var(--space-md);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--dur-fast) var(--ease-out-quart);
+}
+
+.finder:focus-within {
+  box-shadow: var(--shadow-md), 0 0 0 2px var(--accent);
+}
+
+.finder-icon {
+  display: flex;
+  color: var(--text-tertiary);
+}
+
+.finder-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.finder input {
+  appearance: none;
+  border: 0;
+  outline: 0;
+  background: none;
+  padding: 13px 0;
+  font-family: var(--font);
+  font-size: var(--text-md);
+  letter-spacing: -0.014em;
+  color: var(--text);
+  min-width: 0;
+}
+
+.finder input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* ---------------------------------------------------------------- results -- */
+
+/* popup.css gives .pr-group a fixed surface; in a full-width sheet the rows
+   need a little more room to breathe than a 400px popup allows. */
+#results:empty {
+  display: none;
+}
+
+#results .pr-row {
+  padding: 13px var(--space-lg) 14px;
+}
+
+#results .pr-title {
+  font-size: var(--text-md);
+  -webkit-line-clamp: 1;
+}
+
+/* The branch is the whole reason a ticket id resolves to anything, so it earns
+   a place on the row here even though the popup has no space for it. */
+.pr-branch {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 0.94em;
+  color: var(--accent-text);
+  flex: 0 1 auto;
+  min-width: 4ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pr-go {
+  display: flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity var(--dur-instant) var(--ease-out-quart),
+    transform var(--dur-instant) var(--ease-out-quart);
+}
+
+.pr-row:hover .pr-go,
+.pr-row:focus-visible .pr-go {
+  opacity: 1;
+  transform: none;
+}
+
+.pr-go svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---------------------------------------------------------------- notices -- */
+
+/* Setting `display` on an element that carries the `hidden` attribute overrides
+   the user-agent `[hidden] { display: none }`, and the empty card shows through
+   as a grey slab under the rows. */
+.sheet-notice[hidden] {
+  display: none;
+}
+
+.sheet-notice {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-2xl) var(--space-lg);
+  text-align: center;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* popup.css caps the body copy for a 400px popup, which in a 620px sheet leaves
+   a thin column of text down the middle. */
+.sheet-notice .notice-body {
+  max-width: 44ch;
+}
+
+.sheet-foot {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+/* A search field with nothing behind it is an invitation to a dead end. */
+.sheet[data-state='noToken'] .finder,
+.sheet[data-state='error'] .finder {
+  display: none;
+}
+
+.sheet[data-state='loading'] .finder,
+.sheet[data-state='loading'] .sheet-foot {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet,
+  #results .pr-row {
+    animation: none;
+  }
+  .pr-go {
+    transition: none;
+  }
+}

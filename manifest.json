@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pull Deck",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "See every pull request waiting on you, and open them all into one tab group without ever duplicating a tab.",
   "minimum_chrome_version": "99",
   "icons": {
@@ -29,7 +29,8 @@
     "tabGroups",
     "storage",
     "alarms",
-    "nativeMessaging"
+    "nativeMessaging",
+    "webNavigation"
   ],
   "host_permissions": [
     "https://api.github.com/*"

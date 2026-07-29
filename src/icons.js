@@ -54,6 +54,10 @@ export const icons = {
 
   alert: wrap('<path d="M8 2.6 1.9 13.2h12.2L8 2.6Z"/><path d="M8 6.5v3M8 11.3v.1"/>'),
 
+  search: wrap('<circle cx="7.1" cy="7.1" r="4.5"/><path d="M10.4 10.4l3 3"/>'),
+
+  arrowRight: wrap('<path d="M3.4 8h9.2M9 4.4 12.6 8 9 11.6"/>'),
+
   key: wrap(
     '<circle cx="5.6" cy="10.4" r="2.6"/><path d="M7.5 8.5 13 3M10.6 5.9l1.6 1.6M12.2 4.3l1.6 1.6"/>'
   ),

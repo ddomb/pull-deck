@@ -11,6 +11,7 @@ import { fetchPullRequests, mergeScopes, GitHubError } from './github.js';
 import { openIntoGroup, readGroupState } from './tab-group.js';
 import { readSettings, writeSettings } from './store.js';
 import { pullRequestKey } from './pr-url.js';
+import { findMatches } from './resolve.js';
 
 const CACHE_TTL_MS = 60_000;
 const BADGE_BG = '#1d7f8c';
@@ -267,6 +268,52 @@ export async function openOneById(id) {
     if (found) return openOne({ id: found.id, url: found.url });
   }
   throw new Error(`No pull request with id ${id}.`);
+}
+
+/* -------------------------------------------------------------- shortcuts -- */
+
+/**
+ * A cache from before branch names were fetched, which cannot answer a ticket
+ * query at all. `headRefName` is always a string once fetched, so `undefined`
+ * across the board is the signal — and it is checked on every entry rather than
+ * some, because a single old row would otherwise mask a whole stale cache.
+ */
+function lacksBranches(list) {
+  return list.length > 0 && list.every((pr) => pr.headRefName === undefined);
+}
+
+/**
+ * Resolve a shortcut like "abv-4242" against the pull requests already loaded.
+ *
+ * Deliberately bypasses `mayFetchNow` in the one case below. The live poll
+ * keeps the cache a few seconds old at all times, so the ordinary throttle
+ * would refuse the very refresh that makes branch matching possible — and the
+ * feature would look broken on exactly the reload that ships it. This costs one
+ * request, once, and then never again.
+ */
+export async function resolveShortcut(query) {
+  const settings = await readSettings();
+  if (!settings.token) return { query, status: 'noToken', matches: [], all: [] };
+
+  let cache = settings.cache;
+  let list = cache ? mergeScopes(cache.scopes ?? {}) : [];
+
+  if (!cache || lacksBranches(list)) {
+    try {
+      cache = await fetchPullRequests(settings.token);
+      await writeSettings({ cache, lastError: null });
+      await refreshBadge(cache, settings);
+      list = mergeScopes(cache.scopes ?? {});
+    } catch (caught) {
+      // A stale list still answers a plain "#6081", so only a cold cache is
+      // fatal here.
+      if (!cache) {
+        return { query, status: 'error', error: serializeError(caught), matches: [], all: [] };
+      }
+    }
+  }
+
+  return { query, ...findMatches(query, list) };
 }
 
 /* ------------------------------------------------------------------ badge -- */

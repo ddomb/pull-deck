@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Pull Deck</title>
+    <link rel="stylesheet" href="popup.css" />
+    <link rel="stylesheet" href="resolve.css" />
+  </head>
+  <body>
+    <main class="sheet" id="sheet" data-state="loading">
+      <header class="sheet-head">
+        <img class="sheet-mark" src="../icons/icon128.png" alt="" width="34" height="34" />
+        <div class="sheet-copy">
+          <h1 class="sheet-title" id="headline">Looking that up…</h1>
+          <p class="sheet-sub" id="subhead"></p>
+        </div>
+      </header>
+
+      <div class="finder" id="finder">
+        <span class="finder-icon" id="finder-icon"></span>
+        <input
+          id="query"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          autocapitalize="off"
+          placeholder="Ticket, branch, or #number"
+          aria-label="Find a pull request"
+          aria-describedby="subhead"
+        />
+      </div>
+
+      <ul class="pr-group" id="results" aria-label="Matching pull requests"></ul>
+
+      <div class="sheet-notice" id="notice" hidden></div>
+
+      <p class="sheet-foot" id="foot"></p>
+    </main>
+
+    <script type="module" src="resolve-page.js"></script>
+  </body>
+</html>

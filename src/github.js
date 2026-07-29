@@ -34,6 +34,7 @@ fragment PullDeckPR on PullRequest {
   additions
   deletions
   reviewDecision
+  headRefName
   repository { nameWithOwner }
   commits(last: 1) {
     nodes { commit { statusCheckRollup { state } } }
@@ -158,6 +159,10 @@ function normalize(node) {
     title: node.title,
     url: node.url,
     repo: node.repository?.nameWithOwner ?? '',
+    // The branch, so a ticket id can be looked up without another round trip.
+    // Always a string once fetched: `undefined` is how resolve-time code tells
+    // a cache written before this field existed from one that simply has none.
+    headRefName: node.headRefName ?? '',
     isDraft: Boolean(node.isDraft),
     updatedAt: node.updatedAt,
     additions: node.additions ?? 0,

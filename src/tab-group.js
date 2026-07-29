@@ -18,7 +18,7 @@ const NO_GROUP = -1; // chrome.tabGroups.TAB_GROUP_ID_NONE
  * `pendingUrl` in precisely the case it exists for. That reads as "no pull
  * request here", and the tab gets opened a second time.
  */
-function tabUrl(tab) {
+export function tabUrl(tab) {
   return tab.url || tab.pendingUrl || '';
 }
 

@@ -51,7 +51,10 @@ Full permission list:
 | `tabGroups` | Naming and colouring the group |
 | `storage` | The token, settings, and the cached list |
 | `alarms` | The 15-minute badge refresh |
+| `webNavigation` | Catching `http://pull-dock/…` shortcuts before they hit the network |
 | `https://api.github.com/*` | The one host it talks to |
+
+`webNavigation` adds no new warning text — `tabs` already covers it — and the listener is registered with a host filter, so Chrome only wakes the worker for the shortcut hosts rather than for every page you open.
 
 ## How "don't open it twice" actually works
 
@@ -72,6 +75,37 @@ Deliberate behaviour worth knowing: **the group stays in whichever window it alr
 | `⌘R` / `Ctrl R` | Refresh |
 | `←` `→` | Switch list (when a tab is focused) |
 | `Esc` | Close settings |
+
+## Jump straight to a pull request
+
+Type this anywhere a URL goes:
+
+```
+http://pull-dock/pr/abv-4242
+```
+
+and you land on `https://github.com/Above-Security/above/pull/6081` — whichever open pull request has that ticket in its branch. Nothing is configured per repository; it resolves against the same list the popup is showing.
+
+It is not a real address, and it never reaches the network. The extension catches the navigation in `webNavigation.onBeforeNavigate` — before the request leaves the browser — and replaces it. Waiting for `pull-dock` to fail DNS instead would mean watching an error page appear and then disappear.
+
+**What you can put after the slash**, best match first:
+
+| Shorthand | Matches |
+| --- | --- |
+| `abv-4242` | The ticket id as a whole token in the branch name |
+| `6081`, `#6081` | That pull request number |
+| `above#6081`, `above/6081` | That number in that repository, when two repos share one |
+| `refresher` | Words in the branch, then in the title |
+
+`pull-deck` and `pulldeck` work too, as does `/abv-4242` with no `/pr/`. If a corporate DNS search list turns the bare host into something that genuinely resolves, use `pull-dock.test` — [RFC 6761](https://www.rfc-editor.org/rfc/rfc6761) reserves `.test` so it can never be registered.
+
+**It refuses to guess.** Two pull requests carrying the same ticket is ordinary — a stacked branch, a revert, a cherry-pick to a release branch — so a tie is never broken. You get a chooser instead, and nothing opens until you pick. Same for a miss, which lists everything open with a search field, so a typo costs a keystroke rather than a retype.
+
+That caution is the whole design. A miss is a mild annoyance; a *wrong* hit sends you to somebody else's pull request and you may not notice until you have already commented on it. So matching is on whole tokens, not substrings: `abv-424` does not match `ABV-4242`, and `abv-4242` does not match `ABV-42421`. `test/resolve.test.mjs` leads with those two cases.
+
+**Already open? You go to that tab.** The shortcut resolves to a pull request, then looks for it using the same `(host, owner, repo, number)` identity the rest of the extension uses. If a tab already has it, that tab is focused and the one you typed into closes — unless it is the last tab in its window, because no shortcut should ever cost somebody a window.
+
+The shortcut deliberately does *not* route through the tab group. It is a redirect, and a redirect that quietly created a group would be doing something you did not ask for. The tab it leaves behind is not a permanent stray: the next **Open in group** adopts it.
 
 ## Live updates
 
@@ -111,8 +145,11 @@ Regenerates the PNG icons from `tools/make-icons.mjs`. The mark is drawn procedu
 npm run preview
 ```
 
-Generates a stubbed copy of the popup under `.claude/tmp/preview/` and serves it at
-<http://127.0.0.1:8731/.claude/tmp/preview/preview.html>. Append `?scenario=` with `list`, `mixed`, `empty`, `onboarding`, `error`, `ratelimit`, or `loading` to inspect each state. The preview is generated from `src/popup.html` rather than copied, so it cannot drift, and it is not part of the packaged extension.
+Generates stubbed copies of the popup and the chooser under `.claude/tmp/preview/` and serves them at
+<http://127.0.0.1:8731/.claude/tmp/preview/preview.html> and
+<http://127.0.0.1:8731/.claude/tmp/preview/resolve.html>. Append `?scenario=` with `list`, `mixed`, `empty`, `onboarding`, `error`, `ratelimit`, or `loading` to inspect each popup state; the chooser takes `?q=` and drives the real matcher, so what you see there is what `src/resolve.js` actually decides. Both are generated from the shipped HTML rather than copied, so they cannot drift, and neither is part of the packaged extension.
+
+The chooser especially needs this: nothing links to it, and the service worker only navigates a tab there on a miss — without a preview the only way to look at the page would be to type a shortcut and hope it fails.
 
 ## Layout
 
@@ -125,9 +162,15 @@ src/service-worker.js  All network and tab work
 src/github.js          GraphQL client and typed errors
 src/tab-group.js       The idempotent open-into-a-group operation
 src/pr-url.js          Pull request identity
+src/resolve.js         Shortcut URL parsing and the matching rules
+src/resolve.html/.css  The chooser, for a tie or a miss
+src/resolve-page.js    Chooser UI
+src/pr-row.js          Row furniture shared by both surfaces
 src/store.js           Persisted settings
 src/icons.js           The 16px icon set
 ```
+
+`pr-row.js` exists for `badgesFor`. Two copies of the mapping from GitHub's review and check states to what you actually see would drift, and then the popup and the chooser would disagree about whether the same pull request is approved — worse than either being wrong, because there is no longer a right answer to point at.
 
 `popup.js` never calls `fetch` or the tab APIs. Chrome destroys a popup the moment focus leaves it, and `chrome.tabs.create` can take focus, so a create-then-group sequence started in the popup would strand itself with tabs opened but never grouped. The service worker owns the whole operation and reports progress back to the popup if it is still alive.
 
