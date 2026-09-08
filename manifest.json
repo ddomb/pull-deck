@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Pull Deck",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "See every pull request waiting on you, and open them all into one tab group without ever duplicating a tab.",
-  "minimum_chrome_version": "99",
+  "minimum_chrome_version": "111",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -30,10 +30,37 @@
     "storage",
     "alarms",
     "nativeMessaging",
-    "webNavigation"
+    "webNavigation",
+    "declarativeNetRequestWithHostAccess"
   ],
   "host_permissions": [
-    "https://api.github.com/*"
+    "https://api.github.com/*",
+    "*://pull-deck/*",
+    "*://pull-deck.test/*",
+    "*://pull-dock/*",
+    "*://pull-dock.test/*",
+    "*://pulldeck/*",
+    "*://pulldeck.test/*",
+    "*://pulldock/*",
+    "*://pulldock.test/*"
   ],
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlobd13ktAuxqs/MC+WNhhyMIx3iKkjIEYzFBf5NFDsVAZ9NCd2XHV3NttXv3+neBwNlozIvxb6bJqudIgaTYgL26LLz+7txHB8BuVpVjCTyrnmoNv8yC58oF/4uME4QkzoVhzjZ3bbgcfluQ+gaq8Z7zUIgYfeB6y8QhUGIj678vN8yJbRvscp29KqDhD5OQtCZU3X1xDquSInQBK0FWfn70zLiaAd/WtCdzbtNdJQGA/UkFq/uJHO9Y/976Ot+7wGYhEPWfhJComw2N5TkU4rKeOrdWKg6iTE8zhCJB95bZMExHtpdu03LicuWaUFhVUZqqqCjfTQXLSmQxO7kpBwIDAQAB"
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlobd13ktAuxqs/MC+WNhhyMIx3iKkjIEYzFBf5NFDsVAZ9NCd2XHV3NttXv3+neBwNlozIvxb6bJqudIgaTYgL26LLz+7txHB8BuVpVjCTyrnmoNv8yC58oF/4uME4QkzoVhzjZ3bbgcfluQ+gaq8Z7zUIgYfeB6y8QhUGIj678vN8yJbRvscp29KqDhD5OQtCZU3X1xDquSInQBK0FWfn70zLiaAd/WtCdzbtNdJQGA/UkFq/uJHO9Y/976Ot+7wGYhEPWfhJComw2N5TkU4rKeOrdWKg6iTE8zhCJB95bZMExHtpdu03LicuWaUFhVUZqqqCjfTQXLSmQxO7kpBwIDAQAB",
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "shortcuts",
+        "enabled": true,
+        "path": "rules/shortcuts.json"
+      }
+    ]
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/resolve.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; frame-ancestors 'none'"
+  }
 }

@@ -38,9 +38,7 @@ test('trailing slash is the same pull request', () => {
 });
 
 test('case differences in owner and repo still match', () => {
-  assert.ok(
-    isSamePullRequest(CANONICAL, 'https://github.com/AboveSec/Platform-API/pull/4120')
-  );
+  assert.ok(isSamePullRequest(CANONICAL, 'https://github.com/AboveSec/Platform-API/pull/4120'));
 });
 
 test('leading zeros in the number normalize', () => {

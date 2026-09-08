@@ -16,8 +16,8 @@ const STEMS = ['pull-deck', 'pull-dock', 'pulldeck', 'pulldock'];
 /**
  * A single-label host works, but a corporate DNS search list can append its own
  * suffix and turn `pull-dock` into something that genuinely resolves. `.test`
- * is reserved by RFC 6761 and guaranteed never to, so it is the escape hatch
- * when the bare form misbehaves.
+ * is reserved by RFC 6761. Declarative redirects, rather than DNS behavior,
+ * keep shortcut HTTP requests local when the extension is enabled.
  */
 export const SHORTCUT_HOSTS = STEMS.flatMap((stem) => [stem, `${stem}.test`]);
 
@@ -116,15 +116,19 @@ function tierFor(query, pr) {
   const title = String(pr.title ?? '');
 
   const explicit = splitRepoNumber(q);
-  if (explicit && explicit.number === pr.number) {
-    if (repoMatches(String(pr.repo ?? '').toLowerCase(), explicit.repo)) return 0;
+  if (explicit) {
+    return explicit.number === pr.number &&
+      repoMatches(String(pr.repo ?? '').toLowerCase(), explicit.repo)
+      ? 0
+      : null;
   }
 
   const bare = q.replace(/^#/, '');
-  if (/^\d+$/.test(bare) && Number(bare) === pr.number) return 1;
+  if (/^\d+$/.test(bare)) return Number(bare) === pr.number ? 1 : null;
 
   if (containsToken(branch, q)) return 2;
   if (containsToken(title, q)) return 3;
+  if (/^[a-z][a-z0-9]*-\d+$/.test(q)) return null;
   if (branch.toLowerCase().includes(q)) return 4;
   if (title.toLowerCase().includes(q)) return 5;
   return null;

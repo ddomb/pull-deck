@@ -19,10 +19,11 @@ import {
   onProgress,
   serializeError,
 } from './app-state.js';
+import { BRIDGE_PROTOCOL_VERSION, BRIDGE_HOST } from './bridge-protocol.js';
 
-const HOST_NAME = 'com.pulldeck.bridge';
+const HOST_NAME = BRIDGE_HOST;
 const RECONNECT_ALARM = 'pull-deck-bridge-reconnect';
-const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = BRIDGE_PROTOCOL_VERSION;
 
 // Two different failures deserve two different retry policies, and Chrome's
 // error strings tell them apart:
@@ -45,6 +46,8 @@ let port = null;
 let attempt = 0;
 let lastReason = null;
 let detachProgress = null;
+let accepted = false;
+let handshakeTimer = null;
 
 /** Idempotent: safe to call on every service worker start. */
 export function ensureBridge() {
@@ -64,35 +67,69 @@ function openPort() {
   }
 
   port = opened;
+  accepted = false;
+  const connectionId = crypto.randomUUID();
   // Note: the backoff counter is NOT reset here. connectNative() hands back a
   // Port synchronously even when no host exists — the failure only surfaces
   // later via onDisconnect. Resetting on connect would therefore make a missing
   // menu bar app respawn a process every 30 seconds forever. The counter is
   // cleared in handleMessage instead, on the first byte that proves the relay
   // is genuinely alive.
-  port.onMessage.addListener(handleMessage);
+  port.onMessage.addListener((message) => {
+    if (port === opened) void handleMessage(message, opened, connectionId);
+  });
   port.onDisconnect.addListener(() => {
+    if (port !== opened) return;
     // lastError is the only signal distinguishing "host not installed" from a
     // clean shutdown, and it is only readable inside this handler.
     const reason = chrome.runtime.lastError?.message;
     if (reason) console.info('Pull Deck bridge: disconnected —', reason);
-    lastReason = reason ?? null;
-    teardown();
-    scheduleReconnect(reason);
+    failConnection(opened, reason ?? lastReason);
   });
 
-  detachProgress = onProgress((event) => post({ type: 'progress', ...event }));
+  detachProgress = onProgress((event) => {
+    if (port === opened && accepted && event.operationId?.startsWith(`${connectionId}:`)) {
+      post({
+        type: 'progress',
+        ...event,
+        operationId: event.operationId.slice(connectionId.length + 1),
+      });
+    }
+  });
 
   post({ type: 'hello', version: PROTOCOL_VERSION, extensionId: chrome.runtime.id });
-  void pushState();
+  if (port !== opened) return;
+  handshakeTimer = setTimeout(() => {
+    if (port !== opened || accepted) return;
+    failConnection(
+      opened,
+      'The menu bar app did not complete the handshake. Rebuild and reopen the matching app.'
+    );
+  }, 10_000);
+  handshakeTimer.unref?.();
 }
 
 function teardown() {
+  clearTimeout(handshakeTimer);
+  handshakeTimer = null;
+  accepted = false;
   port = null;
   if (detachProgress) {
     detachProgress();
     detachProgress = null;
   }
+}
+
+function failConnection(target, reason) {
+  if (port !== target) return;
+  lastReason = reason ?? null;
+  teardown();
+  try {
+    target.disconnect();
+  } catch {
+    /* already disconnected */
+  }
+  scheduleReconnect(reason);
 }
 
 function scheduleReconnect(reason) {
@@ -109,7 +146,7 @@ function scheduleReconnect(reason) {
 
 /** What the popup shows, and why it is not connected. */
 export function bridgeStatus() {
-  return { connected: Boolean(port), reason: lastReason };
+  return { connected: accepted, connecting: Boolean(port) && !accepted, reason: lastReason };
 }
 
 /** Skip whatever backoff is pending and try right now. */
@@ -132,38 +169,64 @@ export function reconnect() {
 
 function post(message) {
   if (!port) return;
+  const target = port;
   try {
     port.postMessage(message);
-  } catch {
-    // Racing a disconnect. onDisconnect will schedule the retry.
-    teardown();
+  } catch (error) {
+    failConnection(target, error?.message ?? 'The native connection closed during a send.');
   }
 }
 
 /** Push current state to the app unprompted; it has no way to poll cheaply. */
 export async function pushState() {
-  if (!port) return;
+  if (!port || !accepted) return;
+  const target = port;
   try {
-    post({ type: 'state', state: await loadState() });
+    const state = await loadState();
+    if (port === target && accepted) post({ type: 'state', state });
   } catch (error) {
-    post({ type: 'state', error: serializeError(error) });
+    if (port === target && accepted) post({ type: 'state', error: serializeError(error) });
   }
 }
 
-async function handleMessage(message) {
+async function handleMessage(message, target, connectionId) {
+  if (message?.type === 'hello') {
+    clearTimeout(handshakeTimer);
+    handshakeTimer = null;
+    if (message.version !== PROTOCOL_VERSION || message.accepted !== true) {
+      failConnection(
+        target,
+        message.reason ??
+          'The app and extension use different bridge versions. Rebuild and reopen the app.'
+      );
+      return;
+    }
+    accepted = true;
+    attempt = 0;
+    lastReason = null;
+    await pushState();
+    return;
+  }
+  if (!accepted) return;
   attempt = 0; // proof of life: something is actually on the other end
   const id = message?.id ?? null;
   try {
-    const data = await dispatch(message);
+    const data = await dispatch(message, target, connectionId);
+    if (port !== target || !accepted) return;
     if (id !== null) post({ type: 'reply', id, ok: true, data });
     // Any command can change what the list looks like.
     await pushState();
   } catch (error) {
-    if (id !== null) post({ type: 'reply', id, ok: false, error: serializeError(error) });
+    if (port === target && accepted && id !== null)
+      post({ type: 'reply', id, ok: false, error: serializeError(error) });
   }
 }
 
-function dispatch(message) {
+function dispatch(message, target, connectionId) {
+  const operation = {
+    operationId: `${connectionId}:native:${message.id}`,
+    canContinue: async () => port === target && accepted,
+  };
   switch (message?.type) {
     case 'getState':
       return loadState({ force: Boolean(message.force) });
@@ -171,9 +234,9 @@ function dispatch(message) {
     // app-state.js is what keeps the pull-request identity rule in exactly one
     // place instead of being reimplemented in Swift.
     case 'openAll':
-      return openScope(message.scope);
+      return openScope(message.scope, operation);
     case 'openOne':
-      return openOneById(message.prId);
+      return openOneById(message.prId, operation);
     case 'settings':
       return applySettings(message.patch ?? {});
     case 'ping':

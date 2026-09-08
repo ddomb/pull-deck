@@ -1,6 +1,6 @@
 {
   "name": "pull-deck",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Chromium extension: your open GitHub pull requests, opened into one tab group without duplicates.",
   "type": "module",
@@ -9,8 +9,23 @@
     "icons": "node tools/make-icons.mjs",
     "preview": "node tools/make-preview.mjs && python3 -m http.server 8731 --bind 127.0.0.1",
     "mac:build": "cd macos && ./build-app.sh release",
-    "mac:test": "cd macos && swift run pulldeck-selftest && cd .. && node macos/tools/relay-roundtrip.mjs",
+    "mac:test": "node macos/tools/test.mjs",
     "mac:live": "node macos/tools/live-app-check.mjs",
-    "test:all": "npm test && npm run mac:test"
-  }
+    "test:all": "npm run check && npm test && npm run mac:test",
+    "generate": "node tools/generate-config.mjs",
+    "check": "node tools/check.mjs && eslint src test tools macos/tools && prettier --check src test tools macos/tools/*.mjs eslint.config.mjs package.json manifest.json .github",
+    "package": "npm run check && python3 tools/package-extension.py",
+    "format": "prettier --write src test tools macos/tools/*.mjs eslint.config.mjs package.json manifest.json .github"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "eslint": "10.9.1",
+    "globals": "17.11.0",
+    "jsdom": "29.1.1",
+    "prettier": "3.9.6"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "license": "MIT"
 }

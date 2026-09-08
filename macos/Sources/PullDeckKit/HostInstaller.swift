@@ -10,8 +10,8 @@ import Foundation
 public enum HostInstaller {
     /// Pinned by the `key` field in manifest.json, so it no longer depends on
     /// where the repo lives. Regenerate with tools/make-extension-key.mjs.
-    public static let extensionID = "jdpikjmmmljjpkmfmhgildnaihbpmfpj"
-    public static let hostName = "com.pulldeck.bridge"
+    public static let extensionID = BuildIdentity.extensionID
+    public static let hostName = BuildIdentity.hostName
 
     /// Chromium writes this file at the root of every user data directory. It
     /// is the only reliable marker of "a Chromium-family browser lives here".
@@ -81,7 +81,8 @@ public enum HostInstaller {
         func children(of dir: URL) -> [URL] {
             (try? fm.contentsOfDirectory(
                 at: dir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
-            ))?.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true } ?? []
+            ))?.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+                ?? []
         }
 
         for entry in children(of: base) {
@@ -92,7 +93,9 @@ public enum HostInstaller {
                 for sub in children(of: entry) { consider(sub) }
             }
         }
-        return found.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return found.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
     }
 
     static func isUserDataDirectory(_ dir: URL) -> Bool {
@@ -118,13 +121,17 @@ public enum HostInstaller {
     /// detection silently report "not loaded".
     public static func profiles(in userDataDir: URL) -> [URL] {
         let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(
-            at: userDataDir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
-        ) else { return [] }
+        guard
+            let entries = try? fm.contentsOfDirectory(
+                at: userDataDir, includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+        else { return [] }
 
         var files: [URL] = []
         for entry in entries {
-            guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
+            guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+            else { continue }
             for name in ["Secure Preferences", "Preferences"] {
                 let file = entry.appendingPathComponent(name)
                 if fm.fileExists(atPath: file.path) { files.append(file) }
@@ -193,7 +200,9 @@ public enum HostInstaller {
     }
 
     private static func scan(file: URL, extensionPath: String?) -> Finding {
-        guard let data = try? Data(contentsOf: file, options: .mappedIfSafe) else { return Finding() }
+        guard let data = try? Data(contentsOf: file, options: .mappedIfSafe) else {
+            return Finding()
+        }
 
         // Two cheap substring scans before committing to a JSON parse of
         // several megabytes; a miss is by far the common case.
@@ -204,12 +213,13 @@ public enum HostInstaller {
         // the whole legacy-id check a no-op. A folder name has no slashes in it.
         let mentionsPinned = data.range(of: Data(extensionID.utf8)) != nil
         let folderName = extensionPath.map { URL(fileURLWithPath: $0).lastPathComponent }
-        let mentionsFolder = folderName.map { !$0.isEmpty && data.range(of: Data($0.utf8)) != nil } ?? false
+        let mentionsFolder =
+            folderName.map { !$0.isEmpty && data.range(of: Data($0.utf8)) != nil } ?? false
         guard mentionsPinned || mentionsFolder else { return Finding() }
 
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let extensions = root["extensions"] as? [String: Any],
-              let settings = extensions["settings"] as? [String: Any]
+            let extensions = root["extensions"] as? [String: Any],
+            let settings = extensions["settings"] as? [String: Any]
         else { return Finding() }
 
         var finding = Finding()
@@ -218,8 +228,8 @@ public enum HostInstaller {
             let wanted = URL(fileURLWithPath: extensionPath).standardizedFileURL.path
             for (id, value) in settings where id != extensionID {
                 guard let entry = value as? [String: Any],
-                      let recorded = entry["path"] as? String, recorded.hasPrefix("/"),
-                      URL(fileURLWithPath: recorded).standardizedFileURL.path == wanted
+                    let recorded = entry["path"] as? String, recorded.hasPrefix("/"),
+                    URL(fileURLWithPath: recorded).standardizedFileURL.path == wanted
                 else { continue }
                 finding.legacyID = id
                 break
@@ -235,7 +245,8 @@ public enum HostInstaller {
         return discover(root: root).map { browser in
             let finding = find(in: browser, extensionPath: source)
             let manifest = readManifest(at: browser.manifestURL)
-            let correct = manifest?["path"] as? String == relayPath
+            let correct =
+                manifest?["path"] as? String == relayPath
                 && (manifest?["allowed_origins"] as? [String])?
                     .contains("chrome-extension://\(extensionID)/") == true
             return Status(
@@ -259,7 +270,8 @@ public enum HostInstaller {
     public static func install(into browser: Browser, relayPath: String) throws -> URL {
         let manifest: [String: Any] = [
             "name": hostName,
-            "description": "Pull Deck bridge between the Chrome extension and the macOS menu bar app",
+            "description":
+                "Pull Deck bridge between the Chrome extension and the macOS menu bar app",
             // Must be absolute on macOS.
             "path": relayPath,
             "type": "stdio",
@@ -270,7 +282,8 @@ public enum HostInstaller {
             at: browser.hostDirectory, withIntermediateDirectories: true
         )
         let data = try JSONSerialization.data(
-            withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            withJSONObject: manifest,
+            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         )
         try data.write(to: browser.manifestURL, options: .atomic)
         return browser.manifestURL
@@ -289,7 +302,7 @@ public enum HostInstaller {
     ) -> [Status] {
         for entry in status(relayPath: relayPath, root: root, extensionPath: extensionPath) {
             if entry.needsInstall {
-                try? install(into: entry.browser, relayPath: relayPath)
+                _ = try? install(into: entry.browser, relayPath: relayPath)
             } else if entry.stale && !entry.needsReload {
                 // Keep the manifest while the extension is only waiting for a
                 // reload; removing it would just have to be undone in a moment.

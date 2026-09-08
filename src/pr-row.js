@@ -45,21 +45,36 @@ export function badge(tone, iconMarkup, label) {
 }
 
 export function badgesFor(pr) {
-  const out = [];
-  if (pr.isDraft) out.push(badge('neutral', icons.draft, 'Draft'));
+  return badgeItems(pr).map((item) => badge(item.tone, item.icon, item.label));
+}
 
-  if (pr.reviewDecision === 'APPROVED') out.push(badge('success', icons.approved, 'Approved'));
-  else if (pr.reviewDecision === 'CHANGES_REQUESTED') out.push(badge('danger', icons.changes, 'Changes'));
+export function rowLabel(pr, grouping = '') {
+  const status = badgeItems(pr)
+    .map((item) => item.label)
+    .join('. ');
+  return (
+    [pr.title, `${pr.repo} number ${pr.number}`, status, grouping].filter(Boolean).join('. ') + '.'
+  );
+}
+
+export function badgeItems(pr) {
+  const out = [];
+  const item = (tone, icon, label) => ({ tone, icon, label });
+  if (pr.isDraft) out.push(item('neutral', icons.draft, 'Draft'));
+
+  if (pr.reviewDecision === 'APPROVED') out.push(item('success', icons.approved, 'Approved'));
+  else if (pr.reviewDecision === 'CHANGES_REQUESTED')
+    out.push(item('danger', icons.changes, 'Changes'));
   else if (pr.reviewDecision === 'REVIEW_REQUIRED' && !pr.isDraft) {
-    out.push(badge('neutral', icons.review, 'In review'));
+    out.push(item('neutral', icons.review, 'In review'));
   }
 
   // Only non-passing checks earn a badge. A green tick on every row is noise,
   // and the thing worth spotting in a glance is the failure.
   if (pr.checks === 'FAILURE' || pr.checks === 'ERROR') {
-    out.push(badge('danger', icons.ciFail, 'Checks failed'));
+    out.push(item('danger', icons.ciFail, 'Checks failed'));
   } else if (pr.checks === 'PENDING' || pr.checks === 'EXPECTED') {
-    out.push(badge('pending', icons.ciPending, 'Checks running'));
+    out.push(item('pending', icons.ciPending, 'Checks running'));
   }
   return out;
 }

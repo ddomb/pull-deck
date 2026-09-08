@@ -9,17 +9,9 @@ import { pullRequestKey } from './pr-url.js';
 
 const NO_GROUP = -1; // chrome.tabGroups.TAB_GROUP_ID_NONE
 
-/**
- * The URL a tab is at or is going to.
- *
- * Deliberately `||` and not `??`. A tab that has not committed its navigation
- * yet reports `url: ""` with the real destination in `pendingUrl`, and `""` is
- * not nullish — `??` would hand back the empty string and never consult
- * `pendingUrl` in precisely the case it exists for. That reads as "no pull
- * request here", and the tab gets opened a second time.
- */
+/** A pending navigation supersedes the committed URL, both toward and away from a PR. */
 export function tabUrl(tab) {
-  return tab.url || tab.pendingUrl || '';
+  return tab.pendingUrl || tab.url || '';
 }
 
 /**
@@ -63,12 +55,28 @@ export async function findGroup({ savedGroupId, title, windowId }) {
  * @param {number|null} args.savedGroupId
  * @param {(event: object) => void} [args.onProgress]
  */
-export async function openIntoGroup({
+export async function openIntoGroup(args) {
+  let result;
+  try {
+    result = await fillGroup(args);
+    return result;
+  } finally {
+    args.onProgress?.({
+      kind: 'done',
+      created: result?.created ?? 0,
+      adopted: result?.adopted ?? 0,
+      groupId: result?.groupId ?? null,
+    });
+  }
+}
+
+async function fillGroup({
   pullRequests,
   title,
   color,
   savedGroupId,
   onProgress = () => {},
+  canContinue = async () => true,
 }) {
   const focused = await currentWindowId();
   const group = await findGroup({ savedGroupId, title, windowId: focused });
@@ -116,11 +124,14 @@ export async function openIntoGroup({
     if (key && !tabIdByKey.has(key)) tabIdByKey.set(key, tab.id);
   }
 
-  const missing = [];
+  const missing = [],
+    requested = new Set();
   const skipped = [];
   for (const pr of pullRequests) {
     const key = pullRequestKey(pr.url);
     if (!key) continue;
+    if (requested.has(key)) continue;
+    requested.add(key);
     if (present.has(key)) {
       skipped.push(pr.id);
       const existing = tabIdByKey.get(key);
@@ -151,12 +162,14 @@ export async function openIntoGroup({
   const tabIds = [];
   const opened = [];
   const failures = [];
+  const warnings = [];
   let adopted = 0;
   let done = 0;
 
   for (const pr of missing) {
     let ok = true;
     try {
+      if (!(await canContinue())) throw Error('The source page was closed or navigated away.');
       const strayId = strays.get(pr.key);
       if (strayId !== undefined) {
         tabIds.push(strayId);
@@ -184,19 +197,33 @@ export async function openIntoGroup({
 
   let groupId = group?.id ?? null;
   if (tabIds.length > 0) {
-    if (groupId !== null) {
-      await chrome.tabs.group({ tabIds, groupId });
-    } else {
-      groupId = await chrome.tabs.group({
-        tabIds,
-        createProperties: { windowId: targetWindowId },
-      });
+    try {
+      if (!(await canContinue())) throw Error('The source page was closed or navigated away.');
+      if (groupId !== null) await chrome.tabs.group({ tabIds, groupId });
+      else
+        groupId = await chrome.tabs.group({
+          tabIds,
+          createProperties: { windowId: targetWindowId },
+        });
+      for (const id of opened) onProgress({ kind: 'grouped', id, ok: true });
+    } catch (error) {
+      for (const id of opened)
+        failures.push({
+          id,
+          message: `Tab remains open but could not be grouped: ${error.message}`,
+        });
+      opened.length = 0;
     }
-    // Re-assert title and colour: cheap, and it repairs a renamed group.
-    await chrome.tabGroups.update(groupId, { title, color });
+    if (opened.length > 0) {
+      try {
+        await chrome.tabGroups.update(groupId, { title, color });
+      } catch (error) {
+        warnings.push(
+          `Tabs were grouped, but the group name or color could not be updated: ${error.message}`
+        );
+      }
+    }
   }
-
-  onProgress({ kind: 'done', created: tabIds.length - adopted, adopted, groupId });
 
   return {
     created: tabIds.length - adopted,
@@ -207,6 +234,7 @@ export async function openIntoGroup({
     movedWindow: Boolean(group) && group.windowId !== focused,
     opened,
     failures,
+    warnings,
     tabIdByPr,
   };
 }

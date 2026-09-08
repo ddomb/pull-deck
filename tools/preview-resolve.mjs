@@ -88,7 +88,11 @@ const stub = {
     async sendMessage(message) {
       await new Promise((r) => setTimeout(r, 120));
       if (message?.type === 'resolve') return { ok: true, data: answer(message.query ?? '') };
-      if (message?.type === 'openOne') return { ok: true, data: { groupId: 12, opened: [message.pullRequest.id] } };
+      if (message?.type === 'openShortcut')
+        return {
+          ok: true,
+          data: { groupId: 12, opened: [message.prId], focused: true, failures: [] },
+        };
       return { ok: false, error: { kind: 'unknown', message: `unhandled ${message?.type}` } };
     },
   },

@@ -1,6 +1,9 @@
 import Foundation
 import PullDeckKit
 
+// stdout is a pipe, so SO_NOSIGPIPE alone cannot protect relay writes.
+signal(SIGPIPE, SIG_IGN)
+
 // The relay Chrome spawns.
 //
 // Chrome launches this process itself, one per connectNative() port, and it
@@ -79,7 +82,8 @@ if callerOrigin == "--install-hosts" || callerOrigin == "--uninstall-hosts" {
 // Chrome already enforces allowed_origins before launching us; this is a
 // belt-and-braces check and is logged rather than trusted as security.
 if callerOrigin != "(none)",
-   !callerOrigin.contains(HostInstaller.extensionID) {
+    !callerOrigin.contains(HostInstaller.extensionID)
+{
     log("warning: launched by an unexpected origin \(callerOrigin)")
 }
 log("launched by \(callerOrigin)")
@@ -109,7 +113,7 @@ func writeToChrome(_ payload: Data) {
         let framed = try NativeMessaging.frame(payload)
         stdoutLock.lock()
         defer { stdoutLock.unlock() }
-        UnixSocket.writeAll(fd: stdoutFD, framed)
+        if !UnixSocket.writeAll(fd: stdoutFD, framed) { exit(0) }
     } catch {
         // A message the app produced that Chrome would reject. Dropping one
         // message beats corrupting the stream for every message after it.

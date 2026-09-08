@@ -9,16 +9,16 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 CONFIG="${1:-release}"
-APP="build/Pull Deck.app"
+APP="${PULLDECK_APP_OUTPUT:-build/Pull Deck.app}"
 BIN_DIR="$APP/Contents/MacOS"
 RES_DIR="$APP/Contents/Resources"
 
 echo "==> Building ($CONFIG)"
+node ../tools/generate-config.mjs --check
 swift build -c "$CONFIG"
 BUILT="$(swift build -c "$CONFIG" --show-bin-path)"
 
 echo "==> Assembling $APP"
-rm -rf "$APP"
 mkdir -p "$BIN_DIR" "$RES_DIR"
 
 cp "$BUILT/PullDeckApp" "$BIN_DIR/PullDeckApp"
@@ -34,34 +34,17 @@ fi
 # It has no other way to know where this repo was cloned.
 EXTENSION_PATH="$(cd .. && pwd)"
 
-cat > "$APP/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleName</key><string>Pull Deck</string>
-  <key>CFBundleDisplayName</key><string>Pull Deck</string>
-  <key>CFBundleIdentifier</key><string>com.pulldeck.app</string>
-  <key>CFBundleExecutable</key><string>PullDeckApp</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleVersion</key><string>1.0.0</string>
-  <key>CFBundleShortVersionString</key><string>1.0.0</string>
-  <key>LSMinimumSystemVersion</key><string>13.0</string>
-  <!-- Menu bar only: no Dock icon, no app switcher entry. -->
-  <key>LSUIElement</key><true/>
-  <key>NSHighResolutionCapable</key><true/>
-  <key>PDExtensionPath</key><string>$EXTENSION_PATH</string>
-</dict>
-</plist>
-PLIST
+python3 tools/write-plist.py "$APP/Contents/Info.plist" "$EXTENSION_PATH"
+plutil -lint "$APP/Contents/Info.plist"
 
 # Ad-hoc signature. Enough for a locally built app; Developer ID and
 # notarization would only matter for distributing it to someone else.
 echo "==> Signing (ad-hoc)"
-codesign --force --deep --sign - "$APP" 2>/dev/null || echo "    (codesign unavailable, continuing unsigned)"
+codesign --force --deep --sign - "$APP"
+codesign --verify --deep --strict "$APP"
 
 echo
-echo "Built: $(pwd)/$APP"
+echo "Built: $(cd "$APP" && pwd)"
 echo
 echo "Next: open \"$APP\""
 echo "It installs the bridge itself, into whichever browsers have the extension"

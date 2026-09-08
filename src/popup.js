@@ -6,18 +6,16 @@ import { icons } from './icons.js';
 import { GROUP_COLORS } from './store.js';
 import { pullRequestKey } from './pr-url.js';
 import { LIVE_INTERVAL_MS } from './app-state.js';
-import { el, glyph, age, badgesFor } from './pr-row.js';
+import { el, glyph, age, badgesFor, rowLabel } from './pr-row.js';
 
 /* ------------------------------------------------------------- transport -- */
 
 // The dev preview (dev/preview.html) installs a stub here so the interface can
 // be inspected outside an extension context. In the real popup this is unset.
-const transport =
-  globalThis.__pullDeckTransport ??
-  {
-    send: (message) => chrome.runtime.sendMessage(message),
-    onProgress: (handler) => chrome.runtime.onMessage.addListener(handler),
-  };
+const transport = globalThis.__pullDeckTransport ?? {
+  send: (message) => chrome.runtime.sendMessage(message),
+  onProgress: (handler) => chrome.runtime.onMessage.addListener(handler),
+};
 
 async function send(message) {
   const reply = await transport.send(message);
@@ -44,6 +42,10 @@ const state = {
   firstLoad: true,
   liveTimer: null,
   renderedSignature: null,
+  authRevision: -1,
+  truncated: {},
+  operationId: null,
+  liveLoading: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -139,9 +141,7 @@ function rowFor(pr, index) {
 
   row.setAttribute(
     'aria-label',
-    `${pr.title}. ${pr.repo} number ${pr.number}. ${
-      inGroup(pr) ? `Already in ${state.settings.groupTitle}.` : 'Not yet in the group.'
-    }`
+    rowLabel(pr, inGroup(pr) ? `Already in ${state.settings.groupTitle}` : 'Not yet in the group')
   );
 
   row.addEventListener('click', () => openOne(pr));
@@ -168,6 +168,8 @@ function markRowInGroup(id) {
   cell.replaceChildren(glyph(icons.inGroup));
   cell.dataset.justAdded = 'true';
   cell.title = `Already in ${state.settings.groupTitle}`;
+  const pr = visible().find((item) => item.id === id);
+  if (pr) row.setAttribute('aria-label', rowLabel(pr, `Already in ${state.settings.groupTitle}`));
 }
 
 /* ------------------------------------------------------------------ render -- */
@@ -181,11 +183,21 @@ function markRowInGroup(id) {
 function listSignature() {
   const rows = visible()
     .map((pr) =>
-      [pr.id, pr.updatedAt, pr.reviewDecision, pr.checks, pr.isDraft, pr.additions, pr.deletions].join(':')
+      [
+        pr.id,
+        pr.title,
+        pr.repo,
+        pr.number,
+        pr.updatedAt,
+        pr.reviewDecision,
+        pr.checks,
+        pr.isDraft,
+        pr.additions,
+        pr.deletions,
+      ].join(':')
     )
     .join('|');
-  const counts = SCOPES.map((scope) => state.scopes[scope]?.length ?? 0).join(',');
-  return `${state.scope}#${counts}#${rows}#${[...state.groupKeys].sort().join(',')}`;
+  return `${state.scope}#${state.settings.groupTitle}#${rows}#${[...state.groupKeys].sort().join(',')}`;
 }
 
 function render() {
@@ -251,6 +263,13 @@ function renderSegments() {
 
 function renderList() {
   const items = visible();
+  const focusedId = dom.list.contains(document.activeElement)
+    ? document.activeElement.dataset.id
+    : null;
+  const scrollView = dom.list.closest('.view');
+  const scrollTop = scrollView?.scrollTop ?? 0;
+  const matched = items.findIndex((pr) => pr.id === focusedId);
+  if (matched >= 0) state.focusIndex = matched;
   state.focusIndex = Math.min(state.focusIndex, Math.max(0, items.length - 1));
   dom.list.replaceChildren(
     ...items.map((pr, i) => {
@@ -259,6 +278,9 @@ function renderList() {
       return li;
     })
   );
+  if (scrollView) scrollView.scrollTop = scrollTop;
+  if (focusedId)
+    dom.list.children[state.focusIndex]?.firstElementChild?.focus({ preventScroll: true });
   syncScrollFade();
 }
 
@@ -295,6 +317,8 @@ function renderDock() {
   if (state.error) {
     dom.dockNote.dataset.tone = 'danger';
     dom.dockNote.textContent = errorCopy(state.error).short;
+  } else if (state.truncated[state.scope]) {
+    dom.dockNote.textContent = 'Showing the 50 most recently updated pull requests in this list.';
   } else if (state.groupOtherWindow) {
     dom.dockNote.textContent = `The group lives in another window.`;
   } else if (already > 0 && todo.length > 0) {
@@ -478,7 +502,11 @@ function startLiveUpdates() {
   state.liveTimer = setInterval(() => {
     if (state.busy || dom.settings.hasAttribute('data-open')) return;
     if (state.stage !== 'list') return;
-    void load({ force: true, quiet: true });
+    if (state.liveLoading) return;
+    state.liveLoading = true;
+    void load({ force: true, quiet: true }).finally(() => {
+      state.liveLoading = false;
+    });
   }, LIVE_INTERVAL_MS);
 
   // Chrome tears the popup down on blur, but clean up anyway rather than
@@ -493,6 +521,16 @@ function stopLiveUpdates() {
 }
 
 function apply(data) {
+  if ((data.authRevision ?? 0) < state.authRevision) return;
+  state.authRevision = data.authRevision ?? 0;
+  state.truncated = data.truncated ?? {};
+  if (data.stage === 'onboarding') {
+    state.viewer = null;
+    state.scopes = { mine: [], reviewing: [], assigned: [] };
+    state.groupKeys.clear();
+    state.renderedSignature = null;
+    state.firstLoad = true;
+  }
   state.stage = data.stage;
   if (data.settings) state.settings = { ...state.settings, ...data.settings };
   if (data.viewer) state.viewer = data.viewer;
@@ -527,12 +565,23 @@ function showFatal(error) {
 
 async function openOne(pr) {
   if (state.busy) return;
+  state.busy = true;
+  state.operationId = crypto.randomUUID();
   try {
-    const result = await send({ type: 'openOne', pullRequest: { id: pr.id, url: pr.url } });
+    const result = await send({
+      type: 'openOne',
+      pullRequest: { id: pr.id, url: pr.url },
+      operationId: state.operationId,
+    });
+    if (result.failures?.length || !result.focused)
+      throw new Error(result.failures?.[0]?.message ?? 'The pull request could not be focused.');
     if (result.groupId) markRowInGroup(pr.id);
   } catch (error) {
     dom.dockNote.dataset.tone = 'danger';
     dom.dockNote.textContent = errorCopy(error).short;
+  } finally {
+    state.busy = false;
+    state.operationId = null;
   }
 }
 
@@ -541,6 +590,7 @@ async function openAll() {
   if (todo.length === 0 || state.busy) return;
 
   state.busy = true;
+  state.operationId = crypto.randomUUID();
   const button = dom.openAll;
   button.dataset.state = 'working';
   button.disabled = true;
@@ -553,6 +603,7 @@ async function openAll() {
   try {
     const result = await send({
       type: 'openAll',
+      operationId: state.operationId,
       pullRequests: todo.map((pr) => ({ id: pr.id, url: pr.url })),
     });
 
@@ -564,7 +615,7 @@ async function openAll() {
       markRowInGroup(id);
     }
 
-    const added = result.created + result.adopted;
+    const added = result.opened.length;
     button.style.setProperty('--progress', '1');
     button.dataset.state = 'done';
     dom.openAllText.textContent = `Added ${added}`;
@@ -576,6 +627,8 @@ async function openAll() {
     if (result.failures.length > 0) {
       dom.dockNote.dataset.tone = 'danger';
       dom.dockNote.textContent = `${result.failures.length} could not be opened.`;
+    } else if (result.warnings?.length) {
+      dom.dockNote.textContent = result.warnings.join(' ');
     } else if (result.adopted > 0) {
       dom.dockNote.textContent = `${result.adopted} already open ${
         result.adopted === 1 ? 'tab was' : 'tabs were'
@@ -584,10 +637,12 @@ async function openAll() {
 
     setTimeout(() => {
       state.busy = false;
+      state.operationId = null;
       renderDock();
     }, 1400);
   } catch (error) {
     state.busy = false;
+    state.operationId = null;
     button.dataset.state = 'idle';
     button.style.setProperty('--progress', '0');
     renderDock();
@@ -608,6 +663,11 @@ function glyphCheck() {
 function renderBridge(status) {
   const connected = Boolean(status?.connected);
   const reason = status?.reason ?? '';
+  if (status?.connecting) {
+    dom.bridgeStatus.textContent = 'Connecting…';
+    dom.bridgeHelp.textContent = 'Waiting for the menu bar app to accept this browser profile.';
+    return;
+  }
   dom.bridgeIcon.replaceChildren(glyph(connected ? icons.inGroup : icons.alert));
   dom.bridgeIcon.style.color = connected ? 'var(--accent)' : 'var(--text-tertiary)';
   dom.bridgeRetry.hidden = connected;
@@ -634,7 +694,17 @@ function refreshBridge(retry = false) {
     .catch(() => renderBridge(null));
 }
 
+function setContentInert(value) {
+  for (const child of dom.app.children) {
+    if (child !== dom.settings) {
+      child.inert = value;
+      child.toggleAttribute('inert', value);
+    }
+  }
+}
+
 function openSettings() {
+  setContentInert(true);
   // render() bails before renderSettings() on any non-list stage, but the panel
   // is reachable from the error screen. Without this the colour picker is empty
   // and the controls show HTML defaults that overwrite real settings on change.
@@ -646,6 +716,7 @@ function openSettings() {
 }
 
 function closeSettings() {
+  setContentInert(false);
   dom.settings.removeAttribute('data-open');
   dom.settings.setAttribute('aria-hidden', 'true');
   dom.openSettings.focus();
@@ -797,6 +868,7 @@ function wire() {
       closeSettings();
       return;
     }
+    if (dom.settings.hasAttribute('data-open')) return;
     if (meta && event.key === 'Enter') {
       event.preventDefault();
       openAll();
@@ -823,13 +895,22 @@ function wire() {
 
   transport.onProgress((message) => {
     if (message?.type !== 'progress') return;
-    if (message.total > 0 && typeof message.done === 'number') {
+    if (
+      state.operationId === message.operationId &&
+      message.total > 0 &&
+      typeof message.done === 'number'
+    ) {
       dom.openAll.style.setProperty('--progress', String(message.done / message.total));
       dom.openAllText.textContent = `Opening ${message.done} of ${message.total}…`;
     }
     // Rows flip as their tab is genuinely created, not on a timer, and only
     // when that create actually succeeded.
-    if (message.id && message.ok !== false) markRowInGroup(message.id);
+    if (message.kind === 'grouped' && message.id && message.ok === true) {
+      const pr = visible().find((item) => item.id === message.id);
+      const key = pr && pullRequestKey(pr.url);
+      if (key) state.groupKeys.add(key);
+      markRowInGroup(message.id);
+    }
   });
 }
 

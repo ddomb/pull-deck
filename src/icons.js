@@ -11,9 +11,7 @@ const wrap = (body, { fill = false } = {}) =>
   `stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 
 export const icons = {
-  refresh: wrap(
-    '<path d="M13.5 8a5.5 5.5 0 1 1-1.61-3.89"/><path d="M13.6 2.4v2.9h-2.9"/>'
-  ),
+  refresh: wrap('<path d="M13.5 8a5.5 5.5 0 1 1-1.61-3.89"/><path d="M13.6 2.4v2.9h-2.9"/>'),
 
   // Sliders rather than a gear: a 16px gear turns to mush, and at this size a
   // spoked circle reads as a brightness control instead of settings.
@@ -42,10 +40,15 @@ export const icons = {
 
   ciPending: wrap('<circle cx="8" cy="8" r="5.4" stroke-dasharray="1.6 2.4"/>'),
 
-  external: wrap('<path d="M9.3 3.2h3.5v3.5M12.4 3.6L7.6 8.4M11.4 9.6v2.6a1 1 0 0 1-1 1H4.2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2.6"/>'),
+  external: wrap(
+    '<path d="M9.3 3.2h3.5v3.5M12.4 3.6L7.6 8.4M11.4 9.6v2.6a1 1 0 0 1-1 1H4.2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2.6"/>'
+  ),
 
   // Solid, because it is a state marker rather than a control.
-  inGroup: wrap('<path d="M8 1.9a6.1 6.1 0 1 0 0 12.2A6.1 6.1 0 0 0 8 1.9Zm3.2 4.6-4 4.6a.8.8 0 0 1-1.2.03L4.2 9.2a.8.8 0 1 1 1.2-1.05l1.2 1.4 3.4-3.9a.8.8 0 0 1 1.2 1.05Z"/>', { fill: true }),
+  inGroup: wrap(
+    '<path d="M8 1.9a6.1 6.1 0 1 0 0 12.2A6.1 6.1 0 0 0 8 1.9Zm3.2 4.6-4 4.6a.8.8 0 0 1-1.2.03L4.2 9.2a.8.8 0 1 1 1.2-1.05l1.2 1.4 3.4-3.9a.8.8 0 0 1 1.2 1.05Z"/>',
+    { fill: true }
+  ),
 
   empty: wrap(
     '<rect x="2.2" y="3.4" width="11.6" height="9.2" rx="2"/>' +

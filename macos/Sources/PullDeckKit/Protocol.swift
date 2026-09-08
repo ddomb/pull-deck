@@ -6,6 +6,7 @@ import Foundation
 // nil instead of throwing.
 
 public struct PullRequest: Codable, Identifiable, Hashable {
+    public let key: String?
     public let id: String
     public let number: Int
     public let title: String
@@ -23,9 +24,10 @@ public struct PullRequest: Codable, Identifiable, Hashable {
     public init(
         id: String, number: Int, title: String, url: String, repo: String, isDraft: Bool,
         updatedAt: String, additions: Int, deletions: Int,
-        reviewDecision: String?, checks: String?
+        reviewDecision: String?, checks: String?, key: String? = nil
     ) {
         self.id = id
+        self.key = key
         self.number = number
         self.title = title
         self.url = url
@@ -114,6 +116,8 @@ public enum Scope: String, Codable, CaseIterable, Identifiable {
 
 /// Exactly what the popup renders, because it is the same `loadState()`.
 public struct AppState: Codable, Hashable {
+    public let authRevision: Int?
+    public let truncated: [String: Bool]?
     public let stage: String
     public let settings: BridgeSettings?
     public let viewer: Viewer?
@@ -132,9 +136,43 @@ public struct OpenResult: Codable, Hashable {
     public let skipped: Int
     public let groupId: Int?
     public let movedWindow: Bool?
+    public let failures: [OpenFailure]?
+    public let warnings: [String]?
+    public let focused: Bool?
+}
+
+public struct OpenFailure: Codable, Hashable {
+    public let id: String
+    public let message: String
+}
+
+public enum ReplyPayload: Decodable {
+    case open(OpenResult)
+    case state(AppState)
+    case other
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let state = try? container.decode(AppState.self) {
+            self = .state(state)
+        } else if let result = try? container.decode(OpenResult.self) {
+            self = .open(result)
+        } else {
+            self = .other
+        }
+    }
+    public var openResult: OpenResult? {
+        if case .open(let result) = self { return result }
+        return nil
+    }
+    public var state: AppState? {
+        if case .state(let state) = self { return state }
+        return nil
+    }
 }
 
 public struct ProgressEvent: Codable, Hashable {
+    public let operationId: String?
     /// `start` | `tab` | `done`. Named `kind` because the transport envelope
     /// already owns `type`; see the regression test in tab-group.test.mjs.
     public let kind: String?
@@ -150,7 +188,7 @@ public enum InboundMessage {
     case state(AppState)
     case stateError(BridgeError)
     case progress(ProgressEvent)
-    case reply(id: Int, ok: Bool, result: OpenResult?, error: BridgeError?)
+    case reply(id: Int, ok: Bool, result: ReplyPayload?, error: BridgeError?)
     case unknown(String)
 
     public static func decode(_ data: Data) -> InboundMessage? {
@@ -166,13 +204,15 @@ public enum InboundMessage {
         case "progress":
             return .progress(
                 ProgressEvent(
+                    operationId: envelope.operationId,
                     kind: envelope.kind, done: envelope.done, total: envelope.total,
                     id: envelope.id.flatMap(\.stringValue), ok: envelope.ok
                 )
             )
         case "reply":
             guard let id = envelope.id?.intValue else { return .unknown("reply") }
-            return .reply(id: id, ok: envelope.ok ?? false, result: envelope.data, error: envelope.error)
+            return .reply(
+                id: id, ok: envelope.ok ?? false, result: envelope.data, error: envelope.error)
         default:
             return .unknown(envelope.type)
         }
@@ -184,7 +224,8 @@ public enum InboundMessage {
         let extensionId: String?
         let state: AppState?
         let error: BridgeError?
-        let data: OpenResult?
+        let data: ReplyPayload?
+        let operationId: String?
         let ok: Bool?
         let kind: String?
         let done: Int?
@@ -208,8 +249,14 @@ public enum LooseID: Decodable, Hashable {
         }
     }
 
-    public var intValue: Int? { if case .int(let v) = self { return v }; return nil }
-    public var stringValue: String? { if case .string(let v) = self { return v }; return nil }
+    public var intValue: Int? {
+        if case .int(let v) = self { return v }
+        return nil
+    }
+    public var stringValue: String? {
+        if case .string(let v) = self { return v }
+        return nil
+    }
 }
 
 /// App → extension.

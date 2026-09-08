@@ -24,6 +24,9 @@ const DEFAULTS = {
   badgeEnabled: true,
   cache: null,
   lastError: null,
+  authRevision: 0,
+  nextFetchAt: 0,
+  fetchFailures: 0,
 };
 
 export async function readSettings() {
@@ -39,6 +42,15 @@ export async function readSettings() {
 
 export async function writeSettings(patch) {
   await chrome.storage.local.set(patch);
+}
+
+// Serialize storage commits, not network work. Auth changes can invalidate a
+// request immediately and then clear any earlier commit already in progress.
+let commits = Promise.resolve();
+export function withSettingsLock(work) {
+  const result = commits.then(work);
+  commits = result.catch(() => {});
+  return result;
 }
 
 export async function clearToken() {

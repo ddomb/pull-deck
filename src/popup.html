@@ -27,13 +27,39 @@
 
       <nav class="segments" id="segments" role="tablist" aria-label="Pull request scope">
         <div class="segments-indicator" id="segments-indicator"></div>
-        <button class="segment" type="button" role="tab" id="tab-mine" aria-controls="stage" data-scope="mine" aria-selected="true">
+        <button
+          class="segment"
+          type="button"
+          role="tab"
+          id="tab-mine"
+          aria-controls="stage"
+          data-scope="mine"
+          aria-selected="true"
+        >
           Mine <span class="segment-count" data-count="mine"></span>
         </button>
-        <button class="segment" type="button" role="tab" id="tab-reviewing" aria-controls="stage" data-scope="reviewing" aria-selected="false" tabindex="-1">
+        <button
+          class="segment"
+          type="button"
+          role="tab"
+          id="tab-reviewing"
+          aria-controls="stage"
+          data-scope="reviewing"
+          aria-selected="false"
+          tabindex="-1"
+        >
           Reviews <span class="segment-count" data-count="reviewing"></span>
         </button>
-        <button class="segment" type="button" role="tab" id="tab-assigned" aria-controls="stage" data-scope="assigned" aria-selected="false" tabindex="-1">
+        <button
+          class="segment"
+          type="button"
+          role="tab"
+          id="tab-assigned"
+          aria-controls="stage"
+          data-scope="assigned"
+          aria-selected="false"
+          tabindex="-1"
+        >
           Assigned <span class="segment-count" data-count="assigned"></span>
         </button>
       </nav>
@@ -60,8 +86,8 @@
             <div class="onboard-head">
               <h2>Connect GitHub</h2>
               <p class="onboard-sub">
-                Pull Deck reads your open pull requests and puts them in one tab group.
-                It needs a personal access token to do that.
+                Pull Deck reads your open pull requests and puts them in one tab group. It needs a
+                personal access token to do that.
               </p>
             </div>
 
@@ -84,8 +110,8 @@
               <p class="field-error" id="token-error" role="alert"></p>
               <p class="field-help" id="token-help">
                 Stored in this browser profile only, and sent nowhere except
-                <code>api.github.com</code>. It is not encrypted, so revoke it on GitHub if
-                this profile is shared.
+                <code>api.github.com</code>. It is not encrypted, so revoke it on GitHub if this
+                profile is shared.
               </p>
             </div>
 
@@ -98,8 +124,8 @@
               <p class="field-help">
                 <a id="token-link" href="#" target="_blank" rel="noreferrer noopener"
                   >Create a classic token with these scopes</a
-                >. Fine-grained tokens are scoped per repository, so they tend to miss
-                pull requests in orgs they were not granted.
+                >. Fine-grained tokens are scoped per repository, so they tend to miss pull requests
+                in orgs they were not granted.
               </p>
             </div>
 
@@ -142,11 +168,17 @@
               <div class="switch-copy">
                 <span class="switch-title">Badge count</span>
                 <span class="switch-help"
-                  >Check every 15 minutes and count every open pull request across all
-                  three lists.</span
+                  >Check every 15 minutes and count every open pull request across all three
+                  lists.</span
                 >
               </div>
-              <button class="switch" id="badge-switch" type="button" role="switch" aria-checked="true">
+              <button
+                class="switch"
+                id="badge-switch"
+                type="button"
+                role="switch"
+                aria-checked="true"
+              >
                 <span class="visually-hidden">Badge count</span>
               </button>
             </div>
@@ -169,9 +201,7 @@
               <span id="token-owner">Not connected</span>
               <span class="token-fingerprint" id="token-fingerprint"></span>
             </div>
-            <button class="danger-link" id="forget-token" type="button">
-              Forget this token
-            </button>
+            <button class="danger-link" id="forget-token" type="button">Forget this token</button>
           </div>
 
           <div class="setting-block">

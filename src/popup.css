@@ -51,10 +51,10 @@
   --pending-quiet: oklch(95.5% 0.045 82);
 
   /* Light mode gets shadows; the dark block below removes them. */
-  --shadow-sm: 0 1px 2px oklch(23% 0.014 190 / 0.06),
-    0 0 0 var(--hairline) oklch(23% 0.014 190 / 0.05);
-  --shadow-md: 0 4px 14px -4px oklch(23% 0.014 190 / 0.14),
-    0 0 0 var(--hairline) oklch(23% 0.014 190 / 0.06);
+  --shadow-sm:
+    0 1px 2px oklch(23% 0.014 190 / 0.06), 0 0 0 var(--hairline) oklch(23% 0.014 190 / 0.05);
+  --shadow-md:
+    0 4px 14px -4px oklch(23% 0.014 190 / 0.14), 0 0 0 var(--hairline) oklch(23% 0.014 190 / 0.06);
   --shadow-accent: 0 1px 3px oklch(40% 0.11 191 / 0.28);
 
   /* A real hairline: 0.5px where the display can draw it. */
@@ -89,8 +89,9 @@
   --dur-base: 240ms;
   --dur-slow: 320ms;
 
-  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text',
-    'Segoe UI', system-ui, sans-serif;
+  --font:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI',
+    system-ui, sans-serif;
 }
 
 @media (min-resolution: 2dppx) {
@@ -352,7 +353,8 @@ svg {
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   position: relative;
-  transition: background var(--dur-instant) var(--ease-out-quart),
+  transition:
+    background var(--dur-instant) var(--ease-out-quart),
     color var(--dur-instant) var(--ease-out-quart),
     transform var(--dur-instant) var(--ease-out-quart);
 }
@@ -499,7 +501,8 @@ svg {
      does nothing for the keyboard, so without this Tab walks off the last row
      into the hidden onboarding view and lands on an invisible password field. */
   visibility: hidden;
-  transition: opacity var(--dur-fast) var(--ease-out-quart),
+  transition:
+    opacity var(--dur-fast) var(--ease-out-quart),
     transform var(--dur-fast) var(--ease-out-quart),
     visibility var(--dur-fast) step-end;
 }
@@ -509,8 +512,10 @@ svg {
   transform: none;
   pointer-events: auto;
   visibility: visible;
-  transition: opacity var(--dur-fast) var(--ease-out-quart),
-    transform var(--dur-fast) var(--ease-out-quart), visibility 0s;
+  transition:
+    opacity var(--dur-fast) var(--ease-out-quart),
+    transform var(--dur-fast) var(--ease-out-quart),
+    visibility 0s;
 }
 
 /* A row cut off by the scroll edge looks like a rendering fault. Fading it out
@@ -899,7 +904,8 @@ li:last-child .pr-row:focus-visible {
   font-weight: 590;
   letter-spacing: -0.008em;
   box-shadow: var(--shadow-accent);
-  transition: background var(--dur-fast) var(--ease-out-quart),
+  transition:
+    background var(--dur-fast) var(--ease-out-quart),
     transform var(--dur-instant) var(--ease-out-quart),
     opacity var(--dur-fast) var(--ease-out-quart);
 }
@@ -1025,7 +1031,8 @@ input[type='password'] {
   background: var(--surface);
   border: var(--hairline) solid var(--border-strong);
   border-radius: var(--radius-md);
-  transition: border-color var(--dur-fast) var(--ease-out-quart),
+  transition:
+    border-color var(--dur-fast) var(--ease-out-quart),
     box-shadow var(--dur-fast) var(--ease-out-quart);
 }
 
@@ -1066,7 +1073,8 @@ input:focus {
   height: 24px;
   border-radius: var(--radius-sm);
   color: var(--text-tertiary);
-  transition: color var(--dur-instant) var(--ease-out-quart),
+  transition:
+    color var(--dur-instant) var(--ease-out-quart),
     background var(--dur-instant) var(--ease-out-quart);
 }
 
@@ -1179,14 +1187,16 @@ input:focus {
   background: var(--bg);
   transform: translateX(100%);
   visibility: hidden;
-  transition: transform var(--dur-slow) var(--ease-out-quart),
+  transition:
+    transform var(--dur-slow) var(--ease-out-quart),
     visibility var(--dur-slow) step-end;
 }
 
 .settings[data-open] {
   transform: none;
   visibility: visible;
-  transition: transform var(--dur-slow) var(--ease-out-quart),
+  transition:
+    transform var(--dur-slow) var(--ease-out-quart),
     visibility 0s;
 }
 
@@ -1248,7 +1258,9 @@ input:focus {
 }
 
 .swatch[aria-pressed='true'] {
-  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--accent);
 }
 
 .switch-row {
@@ -1283,7 +1295,8 @@ input:focus {
   border-radius: var(--radius-pill);
   background: var(--switch-track);
   box-shadow: inset 0 0 0 1px var(--switch-edge);
-  transition: background var(--dur-base) var(--ease-out-quart),
+  transition:
+    background var(--dur-base) var(--ease-out-quart),
     box-shadow var(--dur-base) var(--ease-out-quart);
 }
 
@@ -1365,7 +1378,8 @@ input:focus {
   font-size: var(--text-base);
   font-weight: 550;
   box-shadow: var(--shadow-sm);
-  transition: background var(--dur-instant) var(--ease-out-quart),
+  transition:
+    background var(--dur-instant) var(--ease-out-quart),
     transform var(--dur-instant) var(--ease-out-quart);
 }
 
@@ -1415,8 +1429,8 @@ kbd {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-property: opacity, color, background-color, border-color,
-      box-shadow, visibility !important;
+    transition-property:
+      opacity, color, background-color, border-color, box-shadow, visibility !important;
     transition-duration: 140ms !important;
   }
 
@@ -1450,12 +1464,16 @@ kbd {
   .settings {
     transform: none;
     opacity: 0;
-    transition: opacity 140ms var(--ease-out-quart), visibility 140ms step-end;
+    transition:
+      opacity 140ms var(--ease-out-quart),
+      visibility 140ms step-end;
   }
 
   .settings[data-open] {
     opacity: 1;
-    transition: opacity 140ms var(--ease-out-quart), visibility 0s;
+    transition:
+      opacity 140ms var(--ease-out-quart),
+      visibility 0s;
   }
 
   @keyframes fade-in {

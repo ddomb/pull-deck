@@ -148,7 +148,9 @@
     stage: 'list',
     settings,
     viewer: { login: 'ddomb', avatarUrl: '' },
-    scopes: config.empty ? { mine: [], reviewing: [], assigned: [] } : { mine, reviewing, assigned },
+    scopes: config.empty
+      ? { mine: [], reviewing: [], assigned: [] }
+      : { mine, reviewing, assigned },
     rateLimit: { remaining: 4987, limit: 5000, resetAt: hoursAgo(-1), cost: 3 },
     fetchedAt: Date.now(),
     group: { groupId: 12, keys: [...groupKeys], otherWindow: false },
@@ -167,7 +169,10 @@
       if (message.type === 'load' || message.type === 'connect') {
         if (config.hang) return new Promise(() => {});
         if (config.onboarding && message.type === 'load') {
-          return { ok: true, data: { stage: 'onboarding', settings: { ...settings, hasToken: false } } };
+          return {
+            ok: true,
+            data: { stage: 'onboarding', settings: { ...settings, hasToken: false } },
+          };
         }
         if (config.error && !config.keys) {
           return { ok: true, data: { stage: 'error', settings, error: config.error } };
@@ -185,24 +190,46 @@
       if (message.type === 'settings') {
         Object.assign(settings, message.patch ?? {});
         if (message.patch?.token === null) {
-          return { ok: true, data: { stage: 'onboarding', settings: { ...settings, hasToken: false } } };
+          return {
+            ok: true,
+            data: { stage: 'onboarding', settings: { ...settings, hasToken: false } },
+          };
         }
-        return { ok: true, data: { settings, group: { groupId: 12, keys: [...groupKeys], otherWindow: false } } };
+        return {
+          ok: true,
+          data: { settings, group: { groupId: 12, keys: [...groupKeys], otherWindow: false } },
+        };
       }
 
       if (message.type === 'openAll' || message.type === 'openOne') {
         const list = message.pullRequests ?? [message.pullRequest];
         const total = list.length;
         // Mirrors exactly what app-state.js forwards, envelope and all.
-        progressHandler({ type: 'progress', kind: 'start', total, done: 0 });
+        progressHandler({
+          type: 'progress',
+          kind: 'start',
+          total,
+          done: 0,
+          operationId: message.operationId,
+        });
         const opened = [];
         for (let i = 0; i < total; i++) {
           await sleep(260);
           opened.push(list[i].id);
-          groupKeys.add(`stub-${list[i].id}`);
+          const parsed = new URL(list[i].url);
+          const [, owner, repo, , number] = parsed.pathname.split('/');
+          groupKeys.add(`${parsed.host}/${owner}/${repo}#${number}`);
+          progressHandler({
+            type: 'progress',
+            kind: 'grouped',
+            id: list[i].id,
+            ok: true,
+            operationId: message.operationId,
+          });
           progressHandler({
             type: 'progress',
             kind: 'tab',
+            operationId: message.operationId,
             done: i + 1,
             total,
             id: list[i].id,
@@ -221,6 +248,7 @@
             movedWindow: false,
             opened,
             failures: [],
+            focused: message.type === 'openOne',
           },
         };
       }

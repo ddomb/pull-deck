@@ -74,7 +74,10 @@ test('an absent rateLimit block is treated as healthy', () => {
 
 test('the advertised live interval clears the hard floor', () => {
   // If these ever cross, every other tick would silently be a no-op.
-  assert.ok(LIVE_INTERVAL_MS >= 4_000, `live interval ${LIVE_INTERVAL_MS}ms is below the fetch floor`);
+  assert.ok(
+    LIVE_INTERVAL_MS >= 4_000,
+    `live interval ${LIVE_INTERVAL_MS}ms is below the fetch floor`
+  );
 });
 
 test('sustained polling stays inside the hourly budget', () => {

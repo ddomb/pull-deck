@@ -14,8 +14,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const binary =
-  process.argv[2] ??
-  resolve(import.meta.dirname, '..', '.build', 'debug', 'pulldeck-bridge');
+  process.argv[2] ?? resolve(import.meta.dirname, '..', '.build', 'debug', 'pulldeck-bridge');
 
 if (!existsSync(binary)) {
   console.error(`not ok - relay binary missing at ${binary}\n# run: swift build`);
@@ -103,8 +102,15 @@ server.listen(socketPath, () => {
   setTimeout(() => relay.stdin.write(third.subarray(6)), 120);
 
   setTimeout(() => {
-    check('the app receives every command Chrome sent', fromApp.length === 3, `got ${fromApp.length}`);
-    check('commands arrive intact and in order', fromApp[0]?.scope === 'mine' && fromApp[1]?.type === 'ping');
+    check(
+      'the app receives every command Chrome sent',
+      fromApp.length === 3,
+      `got ${fromApp.length}`
+    );
+    check(
+      'commands arrive intact and in order',
+      fromApp[0]?.scope === 'mine' && fromApp[1]?.type === 'ping'
+    );
     check(
       'a frame split across writes is reassembled, not dropped',
       fromApp[2]?.type === 'getState' && fromApp[2]?.force === true,
@@ -116,8 +122,15 @@ server.listen(socketPath, () => {
     appSocket.write(JSON.stringify({ type: 'state', state: { stage: 'onboarding' } }) + '\n');
 
     setTimeout(() => {
-      check('the app can push unsolicited messages to Chrome', toChrome.length === 2, `got ${toChrome.length}`);
-      check('and they arrive correctly framed', toChrome[0]?.type === 'hello' && toChrome[1]?.type === 'state');
+      check(
+        'the app can push unsolicited messages to Chrome',
+        toChrome.length === 2,
+        `got ${toChrome.length}`
+      );
+      check(
+        'and they arrive correctly framed',
+        toChrome[0]?.type === 'hello' && toChrome[1]?.type === 'state'
+      );
 
       // Closing the app socket must end the relay: Chrome then sees the port
       // drop and the extension's backoff takes over.

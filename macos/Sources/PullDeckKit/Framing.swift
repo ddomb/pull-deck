@@ -58,7 +58,7 @@ public enum NativeMessaging {
         while buffer.count >= headerSize {
             let header = buffer.prefix(headerSize)
             let length = try payloadLength(header: Data(header), limit: limit)
-            guard buffer.count >= headerSize + length else { break } // wait for more
+            guard buffer.count >= headerSize + length else { break }  // wait for more
             let start = buffer.index(buffer.startIndex, offsetBy: headerSize)
             let end = buffer.index(start, offsetBy: length)
             messages.append(Data(buffer[start..<end]))

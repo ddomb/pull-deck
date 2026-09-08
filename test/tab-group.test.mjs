@@ -209,9 +209,29 @@ test('a tab still loading counts as present, via pendingUrl', async () => {
   const result = await openIntoGroup({ ...base, pullRequests: [PR(1), PR(2), PR(3)] });
 
   assert.equal(result.skipped, 2, 'both in-flight tabs are recognised');
-  assert.deepEqual(calls.created.map((c) => c.url), [
-    'https://github.com/abovesec/api/pull/3',
-  ]);
+  assert.deepEqual(
+    calls.created.map((c) => c.url),
+    ['https://github.com/abovesec/api/pull/3']
+  );
+});
+
+test('a navigation toward a PR supersedes the previous committed URL', async () => {
+  const { calls } = fakeChrome({
+    groups: [GROUP],
+    tabs: [{ id: 7, url: 'https://example.test/', pendingUrl: PR(1).url, groupId: -1 }],
+  });
+  const result = await openIntoGroup({ ...base, pullRequests: [PR(1)] });
+  assert.equal(calls.created.length, 0);
+  assert.equal(result.adopted, 1);
+});
+
+test('a tab navigating away no longer counts as the requested PR', async () => {
+  const { calls } = fakeChrome({
+    groups: [GROUP],
+    tabs: [{ id: 7, url: PR(1).url, pendingUrl: 'https://example.test/', groupId: 42 }],
+  });
+  await openIntoGroup({ ...base, pullRequests: [PR(1)] });
+  assert.equal(calls.created.length, 1);
 });
 
 test('readGroupState sees pull requests whose tabs have not committed yet', async () => {
@@ -226,9 +246,7 @@ test('readGroupState sees pull requests whose tabs have not committed yet', asyn
 test('a pinned tab is never dragged into the group', async () => {
   const { calls } = fakeChrome({
     groups: [GROUP],
-    tabs: [
-      { id: 5, url: 'https://github.com/abovesec/api/pull/1', groupId: -1, pinned: true },
-    ],
+    tabs: [{ id: 5, url: 'https://github.com/abovesec/api/pull/1', groupId: -1, pinned: true }],
   });
 
   const result = await openIntoGroup({ ...base, pullRequests: [PR(1)] });
@@ -386,9 +404,6 @@ test('readGroupState reports the keys currently in the group', async () => {
   const state = await readGroupState({ savedGroupId: 42, title: 'Pull Requests' });
 
   assert.equal(state.groupId, 42);
-  assert.deepEqual(state.keys.sort(), [
-    'github.com/abovesec/api#1',
-    'github.com/abovesec/api#2',
-  ]);
+  assert.deepEqual(state.keys.sort(), ['github.com/abovesec/api#1', 'github.com/abovesec/api#2']);
   assert.equal(state.otherWindow, false);
 });

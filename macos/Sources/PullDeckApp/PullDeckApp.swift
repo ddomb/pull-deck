@@ -1,6 +1,7 @@
-import SwiftUI
 import AppKit
 import PullDeckKit
+import PullDeckRuntime
+import SwiftUI
 
 @main
 struct PullDeckApp: App {

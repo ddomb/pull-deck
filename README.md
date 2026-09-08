@@ -1,262 +1,135 @@
 # Pull Deck
 
-A Chromium extension that shows every pull request waiting on you and opens them all into one tab group, without ever opening the same pull request twice.
+See your open GitHub pull requests and put them in one browser tab group.
 
-- Three lists: **Mine** (you authored), **Reviews** (your review was requested), **Assigned** (assigned to you).
-- One button puts the current list into a named tab group. Anything already in the group is left alone.
-- A tab already open elsewhere in that window gets **moved into** the group rather than duplicated.
-- Follows the system light/dark appearance.
+**Mine**, **Reviews**, and **Assigned** show the PRs you authored, were asked to review, or were assigned. Rows include review status, CI status, and diff size. An optional macOS menu bar app controls the same extension.
 
-## Install
+## Install the extension
 
-No build step. Load it straight from disk:
+No build step or npm install is needed to load the extension. Requires Chrome 111+ or a compatible Chromium browser, including Edge and Brave.
 
-```bash
-open -a "Google Chrome" --args --new-window "chrome://extensions"
-```
+1. Download and extract the repository, or clone it using the repository's clone URL.
+2. Open `chrome://extensions` (`edge://extensions` or `brave://extensions` in those browsers).
+3. Enable **Developer mode**, choose **Load unpacked**, and select the folder containing `manifest.json`.
+4. Pin Pull Deck, open its popup, and connect a GitHub token.
 
-1. Turn on **Developer mode** (top right).
-2. Click **Load unpacked**.
-3. Choose this folder: `/Users/ddomb/pull-deck`
-4. Pin Pull Deck to the toolbar so the badge count is visible.
+Packaged source releases can also be loaded after extracting the extension ZIP. Keep the extracted folder in place; an unpacked extension uses those files directly.
 
-The extension id is pinned to `jdpikjmmmljjpkmfmhgildnaihbpmfpj` by the `key` field in `manifest.json`, so it is stable across machines and paths. Regenerate that identity with `node tools/make-extension-key.mjs --force` — which invalidates every installed host manifest, so only do it deliberately.
+## Connect GitHub
 
-Works the same in Edge (`edge://extensions`) and Brave (`brave://extensions`). Needs **Chrome 99+**: `chrome.tabGroups` shipped in 89, but `chrome.runtime.sendMessage` only started returning a promise in 99, and every call here is awaited.
+The popup links to GitHub's classic personal access token page. For private repositories it requests `repo` and `read:org`; for public-only use, `public_repo` is sufficient. Classic `repo` grants write privileges too, even though Pull Deck only reads GitHub data. Prefer a dedicated token and revoke it when no longer needed.
 
-## Connect a token
+Fine-grained tokens see only repositories they were granted and can omit repositories from a cross-organization search. Organization policies and SSO authorization can also restrict results. GitHub Enterprise Server is not supported.
 
-The popup links straight to GitHub's token page with the scopes pre-filled. If you'd rather do it by hand, create a **classic** personal access token with:
+The token and cached PRs are stored in `chrome.storage.local`, within this browser profile. Pull Deck does not encrypt that storage. The token is sent only to `https://api.github.com/graphql`; it is not sent to the companion app. **Settings → Forget this token** clears account data and invalidates pending refreshes. Revoke the token on GitHub separately if you want to invalidate the credential itself.
 
-| Scope | Why |
-| --- | --- |
-| `repo` | Read pull requests in private repositories. GitHub has no read-only private-repo scope, so this is the narrowest option that works. |
-| `read:org` | See pull requests in organisation repositories. |
+## Opening pull requests
 
-For public repositories only, `public_repo` is enough.
+**Open all** puts the selected list into the saved tab group. Matching uses PR identity, including URLs ending in `/files`, `/commits`, query strings, fragments, and pending navigations. Repeated and simultaneous commands reuse the current group/tab state.
 
-**Fine-grained tokens are not recommended here.** They are scoped per repository, so a cross-org "all my pull requests" search silently misses anything the token wasn't explicitly granted. GitHub's own docs do not state whether the search endpoints support them.
+An existing unpinned PR tab in the group's window is moved into the group. The group stays in its own window. Pinned tabs and tabs in other windows are left in place, so opening a list can create a separate copy in those cases. Shortcut navigation instead reuses a matching tab across windows.
 
-The token is stored with `chrome.storage.local`. That means it lives in this browser profile, unencrypted, and is sent nowhere except `api.github.com`. Revoke it on GitHub if the profile is shared. **Settings → Forget this token** clears it and the cached list.
+Failures are reported explicitly. If tabs open but cannot be grouped, they remain open for recovery; retrying adopts them instead of creating another copy.
 
-## About the install warning
-
-Chrome will say **"Read your browsing history"**. That comes from the `tabs` permission, and it is load-bearing: reading `tab.url` is the only way to know which pull requests are already open. Without it Chrome hands back `undefined` instead of an error, nothing matches, and every click would duplicate the whole set.
-
-Full permission list:
-
-| Permission | Used for |
-| --- | --- |
-| `tabs` | Reading tab URLs to detect what is already open |
-| `tabGroups` | Naming and colouring the group |
-| `storage` | The token, settings, and the cached list |
-| `alarms` | The 15-minute badge refresh |
-| `webNavigation` | Catching `http://pull-dock/…` shortcuts before they hit the network |
-| `https://api.github.com/*` | The one host it talks to |
-
-`webNavigation` adds no new warning text — `tabs` already covers it — and the listener is registered with a host filter, so Chrome only wakes the worker for the shortcut hosts rather than for every page you open.
-
-## How "don't open it twice" actually works
-
-Two things make this hold up in practice:
-
-1. **Identity is the pull request, not the URL.** An already-open tab is usually at `/pull/4120/files`, or carries `#issuecomment-…`, or `?w=1`. Matching URL strings misses all of those. Pull Deck matches on the `(host, owner, repo, number)` tuple parsed out of the URL. See `src/pr-url.js` and its tests.
-2. **The group is found by saved id first, title second.** Rename the group in Chrome and it is still the same group, so you don't end up with two. If it was closed, the id is forgotten and a fresh one is created.
-
-Deliberate behaviour worth knowing: **the group stays in whichever window it already lives in.** New tabs are created in that window, so grouping never yanks tabs between windows behind your back. If the group is in a different window than the one you're looking at, the popup says so.
+Each scope currently contains up to **50 most recently updated PRs**. The UI says when a scope is truncated. A truncated or stale snapshot requires explicit selection in the shortcut chooser instead of automatic navigation.
 
 ## Keyboard
 
 | Key | Action |
 | --- | --- |
-| `↑` `↓` | Move between rows |
-| `↵` | Open the focused pull request and go to it |
-| `⌘↵` / `Ctrl↵` | Open all of the current list into the group |
-| `⌘R` / `Ctrl R` | Refresh |
-| `←` `→` | Switch list (when a tab is focused) |
-| `Esc` | Close settings |
+| ↑ / ↓ | Move between PR rows |
+| Enter | Open the focused PR |
+| ⌘Enter / Ctrl+Enter | Open the current list |
+| ⌘R / Ctrl+R | Refresh, subject to API cooldown |
+| ← / → | Change scope when the scope tabs are focused |
+| Esc | Close Settings |
 
-## Jump straight to a pull request
+Settings owns keyboard focus while open. Live updates preserve the focused PR when it remains in the list.
 
-Type this anywhere a URL goes:
+## Shortcut URLs
 
-```
-http://pull-dock/pr/abv-4242
-```
+Use a URL such as `http://pull-dock/pr/ABC-123` to find a PR by ticket/branch. `pull-deck`, `pulldeck`, `pulldock`, and their `.test` variants also work.
 
-and you land on `https://github.com/Above-Security/above/pull/6081` — whichever open pull request has that ticket in its branch. Nothing is configured per repository; it resolves against the same list the popup is showing.
-
-It is not a real address, and it never reaches the network. The extension catches the navigation in `webNavigation.onBeforeNavigate` — before the request leaves the browser — and replaces it. Waiting for `pull-dock` to fail DNS instead would mean watching an error page appear and then disappear.
-
-**What you can put after the slash**, best match first:
-
-| Shorthand | Matches |
+| Shorthand | Meaning |
 | --- | --- |
-| `abv-4242` | The ticket id as a whole token in the branch name |
-| `6081`, `#6081` | That pull request number |
-| `above#6081`, `above/6081` | That number in that repository, when two repos share one |
-| `refresher` | Words in the branch, then in the title |
+| `ABC-123` | Whole ticket token in a branch or title |
+| `123` | Exact PR number |
+| `api/123` | Exact PR number in that repository |
+| `acme/api/123` | Exact PR number with owner and repository |
+| `refresher` | Text search in branch/title, after whole-token matches |
 
-`pull-deck` and `pulldeck` work too, as does `/abv-4242` with no `/pr/`. If a corporate DNS search list turns the bare host into something that genuinely resolves, use `pull-dock.test` — [RFC 6761](https://www.rfc-editor.org/rfc/rfc6761) reserves `.test` so it can never be registered.
+A partial structured ticket such as `ABC-12` cannot select `ABC-123`. Ties and misses open a chooser; Enter never opens a nonmatching fallback row. Use slash-separated PR numbers in links; literal `#` has URL-fragment semantics, and encoded `%23` is preferable when generating a repository/number URL.
 
-**It refuses to guess.** Two pull requests carrying the same ticket is ordinary — a stacked branch, a revert, a cherry-pick to a release branch — so a tie is never broken. You get a chooser instead, and nothing opens until you pick. Same for a miss, which lists everything open with a search field, so a typo costs a keystroke rather than a retype.
+While the extension and its host permissions are enabled, Chrome's packaged declarative rules redirect matching top-level HTTP(S) requests to the internal resolver before the request is sent. This also works while the service worker is asleep. It does not make shortcut strings secret: browser history, operating-system integrations, and other extensions are outside Pull Deck's control.
 
-That caution is the whole design. A miss is a mild annoyance; a *wrong* hit sends you to somebody else's pull request and you may not notice until you have already commented on it. So matching is on whole tokens, not substrings: `abv-424` does not match `ABV-4242`, and `abv-4242` does not match `ABV-42421`. `test/resolve.test.mjs` leads with those two cases.
+The resolver checks cache freshness before automatic opening. It reuses an existing matching tab across windows, or creates/groups a PR tab. Its source page closes only after a destination was focused. Navigating away cancels the old page's ownership of the operation.
 
-**Already open? You go to that tab. Otherwise it lands in the group.** The shortcut resolves to a pull request and then looks for it using the same `(host, owner, repo, number)` identity the rest of the extension uses — across every window, not just the current one. Found, and that tab is focused and left exactly where it is; moving a tab you never asked to have moved is its own kind of surprise. Not found, and it goes through the same `openIntoGroup()` the popup uses, so it arrives in the group with everything else.
+## Refresh behavior
 
-Either way the tab you typed into closes, because you are by then looking at the pull request somewhere else. The one thing that keeps it alive is failing to put you anywhere: if focusing the existing tab fails, or grouping does, it redirects in place instead.
+The visible popup and visible companion panel request updates every five seconds. The companion requests updates every minute while its panel is closed. With the companion disconnected, a 15-minute alarm refreshes the badge when badge updates are enabled.
 
-### From the Claude Code footer
+All requests share one in-flight refresh and cooldown policy. A successful cache is fresh for 60 seconds; forced refreshes have a four-second minimum interval. Below 500 remaining GraphQL points, refreshes slow to one minute. Below 100, cached results are retained until reset. Actual rate-limit responses preserve GitHub's retry deadline; other repeated failures use bounded backoff. Requests time out after 15 seconds.
 
-Typing the URL by hand is the fallback, not the point. Claude Code's `footerLinksRegexes` turns any ticket id that appears in turn output — a tool result, or something Claude wrote — into a clickable badge in the footer row. Point that badge at the shortcut and the whole path is one click.
+GitHub's actual query cost and account limits can vary. The client uses returned rate-limit information rather than relying on an assumed hourly cost. Incomplete/error responses cannot silently replace a complete list with empty scopes.
 
-In `~/.claude/settings.json` (user settings only — the setting is ignored in project `.claude/settings.json` and in `.claude/settings.local.json`):
+## Optional macOS companion
 
-```json
-"footerLinksRegexes": [
-  {
-    "type": "regex",
-    "pattern": "\\b(?<key>[Aa][Bb][Vv]-\\d+)\\b",
-    "label": "PR {key}",
-    "url": "http://pull-dock/pr/{key}"
-  }
-]
-```
-
-`http` is fine here: the scheme allowlist is `https`, `http`, and a set of editor and workspace deep links, and the origin only has to be literal in the template — which `http://pull-dock` is.
-
-The character classes are doing real work. Claude Code compiles the pattern itself and it is not documented whether it adds the `i` flag, so `[Aa][Bb][Vv]` matches `ABV-4242` in a branch name and `abv-4242` in prose without depending on the answer. The matcher lowercases both sides anyway, so the captured case never reaches GitHub.
-
-Two things worth knowing before relying on it: at most **five** badges render at once, the oldest displaced by newer matches, and `/clear` removes them all. And the badge opens your **default** browser — the shortcut only resolves in a browser that has Pull Deck loaded.
-
-## Live updates
-
-Both surfaces poll every 5 seconds while they are on screen — the popup while it is open, the menu bar app while its panel is open. With the panel closed the app drops to 60 seconds, which keeps the badge honest, and with nothing attached the 15-minute background alarm takes over.
-
-The rate is gated where it matters rather than in each caller. `mayFetchNow()` in `app-state.js` is the single choke point every request passes through:
-
-| Condition | Effect |
-| --- | --- |
-| Less than 4s since the last network fetch | Serve cache. Two surfaces polling at once cannot double the spend. |
-| Under 500 points remaining | Stretch to one request a minute |
-| Under 100 points remaining | Stop entirely and coast on cache until the window resets |
-
-That last one matters: the alternative is spending the hour's allowance in twenty minutes and then showing nothing at all.
-
-**What it costs.** One GraphQL round trip is about 3 points against a 5,000/hour budget, so a sustained 5-second cadence runs at roughly 2,160 points/hour — viable, but only worth paying while somebody is looking, which is why it is gated on visibility. Rows are only rebuilt when something they display actually changed, so a tick does not reset your scroll position or drop keyboard focus.
-
-## Data source
-
-One GraphQL request per refresh covers all three lists, the viewer, review decisions, CI rollup, and diff sizes. The REST `/search/issues` endpoint returns neither `reviewDecision` nor check status, which would have meant three extra calls per pull request. Cost is roughly 3 points against a 5,000/hour budget; the list is cached for 60 seconds so reopening the popup is free.
-
-## Development
-
-```bash
-npm test
-```
-
-Tests cover the URL-identity rules that the no-duplicates promise depends on.
-
-```bash
-npm run icons
-```
-
-Regenerates the PNG icons from `tools/make-icons.mjs`. The mark is drawn procedurally, so there are no binary source assets to keep in sync.
-
-```bash
-npm run preview
-```
-
-Generates stubbed copies of the popup and the chooser under `.claude/tmp/preview/` and serves them at
-<http://127.0.0.1:8731/.claude/tmp/preview/preview.html> and
-<http://127.0.0.1:8731/.claude/tmp/preview/resolve.html>. Append `?scenario=` with `list`, `mixed`, `empty`, `onboarding`, `error`, `ratelimit`, or `loading` to inspect each popup state; the chooser takes `?q=` and drives the real matcher, so what you see there is what `src/resolve.js` actually decides. Both are generated from the shipped HTML rather than copied, so they cannot drift, and neither is part of the packaged extension.
-
-The chooser especially needs this: nothing links to it, and the service worker only navigates a tab there on a miss — without a preview the only way to look at the page would be to type a shortcut and hope it fails.
-
-## Layout
-
-```
-manifest.json          MV3 manifest
-src/popup.html         Popup markup
-src/popup.css          Design tokens and every component
-src/popup.js           UI only: renders state, sends messages
-src/service-worker.js  All network and tab work
-src/github.js          GraphQL client and typed errors
-src/tab-group.js       The idempotent open-into-a-group operation
-src/pr-url.js          Pull request identity
-src/resolve.js         Shortcut URL parsing and the matching rules
-src/resolve.html/.css  The chooser, for a tie or a miss
-src/resolve-page.js    Chooser UI
-src/pr-row.js          Row furniture shared by both surfaces
-src/store.js           Persisted settings
-src/icons.js           The 16px icon set
-```
-
-`pr-row.js` exists for `badgesFor`. Two copies of the mapping from GitHub's review and check states to what you actually see would drift, and then the popup and the chooser would disagree about whether the same pull request is approved — worse than either being wrong, because there is no longer a right answer to point at.
-
-`popup.js` never calls `fetch` or the tab APIs. Chrome destroys a popup the moment focus leaves it, and `chrome.tabs.create` can take focus, so a create-then-group sequence started in the popup would strand itself with tabs opened but never grouped. The service worker owns the whole operation and reports progress back to the popup if it is still alive.
-
-## The macOS menu bar app
-
-`macos/` holds a native menu bar app that drives this extension. The extension keeps working entirely on its own — the app is an additional client, not a replacement.
-
-**Why it needs the extension at all.** A native macOS app cannot create Chrome tab groups. Chrome's scripting dictionary exposes `application`, `window`, `tab`, `bookmark folder` and `bookmark item` — there is no tab group class, and `tab` exposes only `id`, `title`, `URL` and `loading`. Edge ships the identical dictionary; Safari's has only `tab`. Tab groups exist solely behind `chrome.tabGroups`, inside the extension sandbox. So the app asks the extension to do it.
-
-**The app holds no secrets and knows no URLs.** It has no GitHub token, no GitHub client, and no copy of the pull-request identity rule. It names a scope (`mine` / `reviewing` / `assigned`); the extension resolves that against its own cache and calls the same `openIntoGroup()` the popup uses. See [BRIDGE.md](BRIDGE.md) for the protocol and the reasoning.
-
-### Install
+Requires macOS 13+, Node 22.13+, Python 3, and Swift 5.9+ via Xcode or Command Line Tools. Build from the repository root:
 
 ```bash
 npm run mac:build
 open "macos/build/Pull Deck.app"
 ```
 
-That is the whole thing. The app installs the native messaging host itself, into whichever browsers actually have the extension loaded, and re-checks every few seconds while it is not connected. Load the extension whenever you like — before or after opening the app — and the two find each other within about a minute.
+The app installs its native host manifest into detected Chromium browsers containing the extension. Load the extension before or after opening the app; setup shows what is missing. **Settings → Menu bar app → Retry now** skips the extension's reconnect delay.
 
-Add the app to Login Items to have it start with the Mac.
+One browser profile controls the companion at a time. Another profile receives an explicit “another browser profile” message. Close the controlling profile/browser, then retry from the intended profile. The extension itself continues working independently in every profile.
 
-**Why there is nothing to paste.** The extension id is pinned by the `key` field in `manifest.json`, so it is the same on every machine and survives the repo moving. Without it Chrome derives the id from the absolute path — `SHA-256("/Users/you/pull-deck")` — so relocating the repo silently changed the id and broke every manifest naming the old one.
+Release 1.4 uses bridge protocol 2. Rebuild/reopen the companion when upgrading from an earlier extension; a mismatched app/extension pair cannot complete the handshake.
 
-**Why it keeps working.** Three things used to break it silently, all of which looked identical from the outside:
+For scripted installation or diagnosis:
 
-| Used to break | Now |
+```bash
+macos/install-host.sh
+"macos/build/Pull Deck.app/Contents/MacOS/pulldeck-bridge" --diagnose
+```
+
+To remove companion integration, quit the app and run `macos/install-host.sh --uninstall`. Remove the extension separately from the browser. You can add the locally built app to Login Items using macOS Settings.
+
+The local app is ad-hoc signed. Downloadable, notarized macOS binaries are not part of the current release process.
+
+## Permissions
+
+| Permission | Purpose |
 | --- | --- |
-| Repo moves → id changes | Id is pinned, so it does not |
-| App moves or is rebuilt → `path` goes stale | Rewritten from the app's own bundle path each launch |
-| Manifest installed in a browser you do not use | Installed only where the extension is loaded, and removed when it is not |
+| `tabs` | Read tab URLs/pending destinations for reuse; open and focus PR tabs |
+| `tabGroups` | Find, populate, name, and color the target group |
+| `storage` | Store the token, settings, cache, and cooldown state |
+| `alarms` | Background refresh and companion reconnect |
+| `nativeMessaging` | Connect to the optional native relay |
+| `webNavigation` | Verify the originating document still owns a shortcut action |
+| `declarativeNetRequestWithHostAccess` | Redirect shortcut requests before HTTP delivery |
+| `https://api.github.com/*` | Read GitHub GraphQL data |
+| HTTP(S) shortcut hosts | Permit redirects for the eight exact shortcut hostnames |
 
-The app's setup panel names the step that is actually incomplete rather than saying "not connected", and the extension's Settings has a **Menu bar app** row with a **Retry now** button for skipping any pending backoff.
+The browser may describe `tabs` as access to browsing history. The resolver HTML is web-accessible to support incoming links, but other sites cannot read its extension-origin data. See SECURITY.md for the local trust boundary and reporting instructions.
 
-```bash
-cd macos
-./install-host.sh              # same thing, from a terminal
-./install-host.sh --uninstall  # remove it everywhere
-
-# Shows every browser found, whether the extension is loaded, and why not
-"build/Pull Deck.app/Contents/MacOS/pulldeck-bridge" --diagnose
-```
-
-**Browsers are found by shape, not by name.** Any directory under `~/Library/Application Support` holding Chromium's `Local State` marker plus a profile counts — which is how Helium (`net.imput.helium`), Dia and other forks get picked up. A hard-coded list of browser names cannot know about the next fork, and the failure is silent: the extension loads fine and the bridge is simply never installed.
-
-**If you loaded the extension before the id was pinned**, Chromium still has it registered under the old path-derived id — editing `manifest.json` does not retroactively move it. Press the reload arrow on its card at `chrome://extensions`. The app detects this case by name and says so rather than sitting there unconnected.
-
-Both call straight into the app's own installer, so the command line and the GUI cannot drift apart.
-
-Requires macOS 13+ (`MenuBarExtra`). Builds with Command Line Tools; full Xcode is not needed.
-
-### Tests
+## Development
 
 ```bash
-npm run test:all     # extension + macOS
-npm run mac:test     # Swift assertions, then a real round trip through the relay binary
-npm run mac:live     # impersonates Chrome against the running app
+npm ci
+npm run check
+npm test
 ```
 
-`mac:live` spawns the actual relay with Chrome's argv and stdio framing and talks to whatever app is listening, so it exercises the live app process, the real socket, and real JSON decoding. The only simulated part is Chrome itself.
+Use the latest Node 22 patch release. Development dependencies provide linting, formatting, and DOM tests; none are shipped in the extension.
 
-## Limitations
+On macOS, `npm run test:all` adds Swift protocol/installer tests, actual native-server lifecycle tests, and a framed relay round trip. It builds its own required binaries and does not attach to an installed companion or real browser profile. `PULLDECK_BUILD_PATH` can point to an empty directory to check a clean Swift build.
 
-- `api.github.com` only. No GitHub Enterprise Server.
-- Up to 50 pull requests per list.
-- The badge refreshes every 15 minutes, so it can lag reality by that much. The popup always refetches if its cache is over 60 seconds old.
+`npm run preview` generates synthetic popup/resolver pages under `.claude/tmp/preview/` and serves them on loopback port 8731. Open `http://127.0.0.1:8731/.claude/tmp/preview/preview.html` or the neighboring `resolve.html`. `npm run format` formats JavaScript; `npm run generate` updates shared identity and redirect rules; `npm run package` builds the allowlisted extension ZIP in `dist/`.
+
+The module boundaries and contribution process are in CONTRIBUTING.md. Native wire behavior is in BRIDGE.md. See `docs/releasing.md` for the release checklist and distribution limits.
+
+## License
+
+MIT. See LICENSE.

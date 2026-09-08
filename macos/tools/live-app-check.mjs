@@ -14,26 +14,45 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const relay = resolve(
-  import.meta.dirname, '..', 'build', 'Pull Deck.app', 'Contents', 'MacOS', 'pulldeck-bridge'
+  import.meta.dirname,
+  '..',
+  'build',
+  'Pull Deck.app',
+  'Contents',
+  'MacOS',
+  'pulldeck-bridge'
 );
 const socket = join(homedir(), 'Library', 'Application Support', 'PullDeck', 'bridge.sock');
 
-let checks = 0, failures = 0;
+let checks = 0,
+  failures = 0;
 const check = (name, passed, detail = '') => {
   checks++;
   if (passed) console.log(`ok ${checks} - ${name}`);
-  else { failures++; console.log(`not ok ${checks} - ${name}${detail ? `  # ${detail}` : ''}`); }
+  else {
+    failures++;
+    console.log(`not ok ${checks} - ${name}${detail ? `  # ${detail}` : ''}`);
+  }
 };
 
 const finish = () => {
   console.log(`1..${checks}`);
-  if (failures) { console.log(`# ${failures} of ${checks} failed`); process.exit(1); }
+  if (failures) {
+    console.log(`# ${failures} of ${checks} failed`);
+    process.exit(1);
+  }
   console.log(`# all ${checks} passed`);
   process.exit(0);
 };
 
-if (!existsSync(relay)) { console.log(`not ok - relay missing (run ./build-app.sh)`); process.exit(1); }
-if (!existsSync(socket)) { console.log(`not ok - app not running (open "build/Pull Deck.app")`); process.exit(1); }
+if (!existsSync(relay)) {
+  console.log(`not ok - relay missing (run ./build-app.sh)`);
+  process.exit(1);
+}
+if (!existsSync(socket)) {
+  console.log(`not ok - app not running (open "build/Pull Deck.app")`);
+  process.exit(1);
+}
 
 const frame = (obj) => {
   const body = Buffer.from(JSON.stringify(obj), 'utf8');
@@ -76,28 +95,51 @@ setTimeout(() => {
 
   // Push a realistic state, as the extension would.
   child.stdin.write(frame({ type: 'hello', version: 1, extensionId: 'livecheck' }));
-  child.stdin.write(frame({
-    type: 'state',
-    state: {
-      stage: 'list',
-      settings: { groupTitle: 'Pull Requests', groupColor: 'cyan', badgeEnabled: true, hasToken: true, tokenTail: '9f2c' },
-      viewer: { login: 'ddomb', avatarUrl: null },
-      scopes: {
-        mine: [{
-          id: 'pr1', number: 4120, title: 'Stop the session refresher thundering on cold start',
-          url: 'https://github.com/abovesec/platform-api/pull/4120', repo: 'abovesec/platform-api',
-          isDraft: false, updatedAt: new Date(Date.now() - 3.6e6).toISOString(),
-          additions: 214, deletions: 61, reviewDecision: 'APPROVED', checks: 'SUCCESS',
-        }],
-        reviewing: [], assigned: [],
+  child.stdin.write(
+    frame({
+      type: 'state',
+      state: {
+        stage: 'list',
+        settings: {
+          groupTitle: 'Pull Requests',
+          groupColor: 'cyan',
+          badgeEnabled: true,
+          hasToken: true,
+          tokenTail: '9f2c',
+        },
+        viewer: { login: 'ddomb', avatarUrl: null },
+        scopes: {
+          mine: [
+            {
+              id: 'pr1',
+              number: 4120,
+              title: 'Stop the session refresher thundering on cold start',
+              url: 'https://github.com/abovesec/platform-api/pull/4120',
+              repo: 'abovesec/platform-api',
+              isDraft: false,
+              updatedAt: new Date(Date.now() - 3.6e6).toISOString(),
+              additions: 214,
+              deletions: 61,
+              reviewDecision: 'APPROVED',
+              checks: 'SUCCESS',
+            },
+          ],
+          reviewing: [],
+          assigned: [],
+        },
+        group: { groupId: 42, keys: [], otherWindow: false },
+        fetchedAt: Date.now(),
+        error: null,
       },
-      group: { groupId: 42, keys: [], otherWindow: false },
-      fetchedAt: Date.now(), error: null,
-    },
-  }));
+    })
+  );
 
   setTimeout(() => {
-    check('the app survived a full state payload', child.exitCode === null, `exited ${child.exitCode}`);
+    check(
+      'the app survived a full state payload',
+      child.exitCode === null,
+      `exited ${child.exitCode}`
+    );
 
     // A message the app must tolerate without understanding it.
     child.stdin.write(frame({ type: 'somethingFromANewerExtension', payload: { a: 1 } }));

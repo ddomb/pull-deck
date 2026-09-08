@@ -1,98 +1,51 @@
-# The bridge
+# Native bridge protocol
 
-How the macOS menu bar app drives the extension.
+The extension initiates `chrome.runtime.connectNative`. Chrome starts `pulldeck-bridge`, which forwards framed stdio messages to the companion's Unix socket. The companion keeps the connection until that browser profile disconnects.
 
-## Why there is a relay at all
-
-Chrome native messaging is **extension-initiated only**. A native process cannot open a connection into an extension; Chrome spawns the host executable itself, one process per `connectNative()` call, and kills it when the port closes.
-
-That is backwards from what the app wants. The app needs to *push* "open these", but it can only ever answer. So the flow is inverted:
-
-```
-  extension service worker
-        │  connectNative("com.pulldeck.bridge")
-        ▼
-  Chrome spawns  pulldeck-bridge          ← stateless, one per connection
-        │  stdin/stdout, length-prefixed JSON
-        │
-        │  connects out to the app's socket
-        ▼
-  ~/Library/Application Support/PullDeck/bridge.sock
-        │  newline-delimited JSON
-        ▼
-  Pull Deck.app (menu bar, long-running)  ← holds all durable state
+```text
+extension worker → Chrome native messaging → relay → companion Unix socket
 ```
 
-Once the relay attaches, the app has a live channel it can write into at any time. Until then it has nothing, and that is a **normal displayable state** ("Chrome not connected"), not an error — Chrome may be closed, the extension may be unloaded, or the service worker may be between lives.
+The relay holds no account state. The GitHub token remains in the extension. The companion receives display data, including PR URLs and canonical identity keys, but commands refer only to scopes or PR IDs. Group settings are applied by the extension's settings API.
 
-Consequences that shape both sides:
+## Identity and handshake
 
-- The relay holds **no state**. It dies with the port and is not restarted by anything except the extension reconnecting.
-- The extension reconnects on disconnect with backoff (`0.5, 1, 2, 5, 15, 30` minutes, capped). The backoff resets only on **proof of life** — the first message actually received — never on `connectNative()` returning, because Chrome returns a Port synchronously even when no host exists.
-- The app must tolerate the channel appearing and disappearing under it at any moment.
+`src/bridge-protocol.js` defines protocol version 2 and the host name. `manifest.json` supplies the public key and release version. `npm run generate` derives the extension ID and emits `BuildIdentity.swift` and the packaged shortcut rules. `npm run check` rejects stale generated files.
 
-## What deliberately does not cross the boundary
+The extension sends `{type:"hello", version:2, extensionId}`. The app replies `{type:"hello", version:2, accepted:true}` only when both identity and protocol match. State/commands are processed only after acceptance. A second client receives `accepted:false` with a reason and is disconnected; it never waits silently in an unserviced socket backlog. The extension reports “connecting” until acceptance and retries failed/expired handshakes.
 
-- **The GitHub token.** It stays in extension storage. The app never sees it and never talks to GitHub.
-- **URLs.** The app names a *scope* (`mine` / `reviewing` / `assigned`) or a pull request *id*. The extension resolves those against its own cache.
-- **Group identity.** Title and colour are read from extension storage inside `app-state.js`. No command may specify them.
-
-That third one is the important one. If a command could carry a group title, the popup and the menu bar app would each have their own idea of which group is "the" group and would silently fill two different ones. The second exists so the pull-request identity rule (`pr-url.js`, 11 tests) is never reimplemented in Swift — two copies of that rule drifting is precisely how the duplicate-tab bug comes back.
+Only one browser profile is active. A connection object owns descriptor lifetime, bounded writes, and shutdown. Incoming callbacks, pending commands, progress, and state delivery are tied to that connection. Detach clears all pending/busy state before a replacement can attach.
 
 ## Framing
 
-**Chrome ⟷ relay** — Chrome's native messaging framing: a 4-byte length prefix followed by that many bytes of UTF-8 JSON.
+Chrome uses a native-endian 32-bit length prefix followed by UTF-8 JSON. Relay/app traffic uses compact JSON plus a newline. Stdout contains only protocol frames; relay diagnostics go to stderr. Socket writes suppress SIGPIPE, and relay pipe writes handle it too. Oversized input is rejected or disconnected.
 
-**Relay ⟷ app** — newline-delimited JSON (one compact object per line) over a Unix domain socket. Chosen over the length-prefixed form because it is trivially inspectable with `nc` while debugging.
+## App commands and replies
 
-## Messages
+Every command carries an integer `id`. Exactly one terminal `reply` corresponds to a completed command. A connection loss cancels pending commands locally; they are not replayed blindly after reconnect. Unanswered commands time out after 30 seconds.
 
-### App → extension
-
-Every command may carry an `id`. If it does, exactly one `reply` comes back bearing the same `id`. Without an `id` the command is fire-and-forget.
-
-| Command | Fields | Does |
+| Command | Input | Success data |
 | --- | --- | --- |
-| `getState` | `force?: bool` | Returns the full state. `force` bypasses the 60s cache. |
-| `openAll` | `scope` | Opens everything in that scope not already grouped. |
-| `openOne` | `prId` | Opens one pull request and focuses its tab. |
-| `settings` | `patch` | Same allow-list as the popup: `groupTitle`, `groupColor`, `badgeEnabled`. |
-| `ping` | — | Liveness. Replies `{pong: true, version}`. |
+| `getState` | `force?: boolean` | Full application state |
+| `openAll` | `scope: mine/reviewing/assigned` | Open result, including partial failures |
+| `openOne` | `prId` | Open result with confirmed `focused` outcome |
+| `settings` | Allowlisted `patch` | Public settings and group state |
+| `ping` | — | `{pong:true, version:2}` |
 
-### Extension → app
+Replies use `{type:"reply", id, ok:true, data}` or `{type:"reply", id, ok:false, error}`. The envelope is decoded independently of command data: a settings/ping payload is not mistaken for an open result. Unknown nonessential payload shapes are tolerated without dropping the reply ID/outcome.
 
-| Message | When |
-| --- | --- |
-| `hello` | Immediately on connect. Carries `version` and `extensionId`. |
-| `state` | After connect, after every command, and after each background refresh. The app never polls. |
-| `progress` | While tabs are opening: `{done, total, id, ok}`, one per tab, emitted as each is genuinely created. |
-| `reply` | `{id, ok, data}` or `{id, ok: false, error}`. |
+Open results include `created`, `adopted`, `skipped`, `groupId`, `opened`, `failures`, `warnings`, and `focused` when relevant. A successful transport reply can contain individual failed tabs. Clients must inspect those failures and retain them as an actionable outcome. A metadata warning does not imply that grouping itself failed.
 
-### The state object
+## State and progress
 
-Identical to what the popup renders, because it is the same `loadState()`:
+The extension pushes state after handshake and successful commands. The companion requests updates every five seconds while its panel is visible and every minute while hidden. Requests share the extension's cache/throttle; a pending refresh is not duplicated. The worker's badge alarm also uses that same coordinator.
 
-```jsonc
-{
-  "stage": "list" | "onboarding" | "error",
-  "settings": { "groupTitle", "groupColor", "badgeEnabled", "hasToken", "tokenTail" },
-  "viewer":   { "login", "avatarUrl" },
-  "scopes":   { "mine": [PR], "reviewing": [PR], "assigned": [PR] },
-  "group":    { "groupId", "keys": [String], "otherWindow": Bool },
-  "rateLimit": { "remaining", "limit", "resetAt", "cost" },
-  "fetchedAt": Number,
-  "error":     { "kind", "message", "retryAt" } | null
-}
-```
+State includes `stage`, public `settings`, `viewer`, `scopes`, `group`, `authRevision`, `fetchedAt`, `truncated`, `stale`, `rateLimit`, and an optional `error`. Each displayed PR carries the canonical `key` computed by the extension. Native group membership is exact key membership, including the host. Older account revisions are ignored.
 
-A `PR` carries `id`, `number`, `title`, `url`, `repo`, `isDraft`, `updatedAt`, `additions`, `deletions`, `reviewDecision`, `checks`.
+Progress uses `{type:"progress", operationId, kind, ...}`. `start` begins an operation; `tab` reports creation/adoption progress; `grouped` confirms membership; `done` ends progress. Native operation IDs are `native:COMMAND_ID` on the wire and additionally scoped to the connection inside the worker. Clients do not interpret successful tab creation as successful grouping. Every terminal reply, including failure and no-op success, clears its command's progress and busy state.
 
-`group.keys` holds the identity keys (`host/owner/repo#number`) of every pull request already in the group. The app renders "in group" by testing membership — it does **not** parse the URLs itself; the extension has already done that with the tested rule.
+## Security and tests
 
-## Errors
+The native host's `allowed_origins` contains the generated extension ID. The socket directory/file use owner-only permissions. Other applications running as the same OS user remain inside the local trust boundary. No TCP listener is used.
 
-Every error crosses as `{kind, message, retryAt}` with the same `kind` values the popup already handles: `badToken`, `forbidden`, `rateLimited`, `offline`, `server`, `malformed`, `unknown`.
-
-## Security
-
-`allowed_origins` in the host manifest names the one extension ID permitted to launch the relay, so no other extension can reach the socket path through it. The socket lives under the user's Application Support directory with user-only permissions. Nothing listens on a TCP port — a localhost server would be reachable by any page in any browser on the machine, which for a tool holding a GitHub token is not a trade worth making.
+`npm run mac:test` builds required binaries, generates wire fixtures from the actual JavaScript handlers, and decodes them in Swift. It also drives the actual native runtime over isolated Unix sockets to check failures, concurrent clients, account revisions, and reconnects. The relay is exercised separately over framed pipes. No test installs hosts or uses a live companion/browser profile.

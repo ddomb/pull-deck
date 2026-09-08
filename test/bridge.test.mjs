@@ -15,6 +15,7 @@ function fakeChrome({ store = {}, connectThrows = false } = {}) {
   let lastError;
 
   const port = {
+    disconnect: () => listeners.disconnect.at(-1)?.(),
     onMessage: { addListener: (fn) => listeners.message.push(fn) },
     onDisconnect: { addListener: (fn) => listeners.disconnect.push(fn) },
     postMessage: (m) => calls.posted.push(m),
@@ -30,7 +31,7 @@ function fakeChrome({ store = {}, connectThrows = false } = {}) {
         calls.connects++;
         calls.hostName = name;
         if (connectThrows) throw new Error('nativeMessaging permission missing');
-        return port;
+        return { ...port };
       },
       sendMessage: async () => {},
     },
@@ -55,7 +56,12 @@ function fakeChrome({ store = {}, connectThrows = false } = {}) {
       },
     },
     action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
-    tabs: { query: async () => [], create: async () => ({ id: 1 }), group: async () => 7, update: async () => ({}) },
+    tabs: {
+      query: async () => [],
+      create: async () => ({ id: 1 }),
+      group: async () => 7,
+      update: async () => ({}),
+    },
     tabGroups: {
       get: async () => {
         throw new Error('no group');
@@ -81,7 +87,7 @@ test('connects to the documented host name and introduces itself', async () => {
   assert.equal(h.calls.hostName, 'com.pulldeck.bridge');
   const hello = h.calls.posted.find((m) => m.type === 'hello');
   assert.ok(hello, 'sends a hello so the app can check protocol compatibility');
-  assert.equal(hello.version, 1);
+  assert.equal(hello.version, 2);
   assert.equal(hello.extensionId, 'pulldecktestextensionid');
 });
 
@@ -143,7 +149,10 @@ test('a host that ran and exited earns a climbing backoff', async () => {
     h.listeners.disconnect.at(-1)();
   }
 
-  assert.deepEqual(h.calls.alarms.map((a) => a.delayInMinutes), [0.5, 1, 2, 5]);
+  assert.deepEqual(
+    h.calls.alarms.map((a) => a.delayInMinutes),
+    [0.5, 1, 2, 5]
+  );
 });
 
 test('connectNow skips a pending backoff', async () => {
@@ -158,8 +167,13 @@ test('connectNow skips a pending backoff', async () => {
   const status = bridge.connectNow();
 
   assert.equal(h.calls.connects, connectsBefore + 1, 'reconnects immediately');
-  assert.deepEqual(h.calls.cleared, ['pull-deck-bridge-reconnect'], 'and cancels the pending alarm');
-  assert.equal(status.connected, true);
+  assert.deepEqual(
+    h.calls.cleared,
+    ['pull-deck-bridge-reconnect'],
+    'and cancels the pending alarm'
+  );
+  assert.equal(status.connected, false);
+  assert.equal(status.connecting, true);
 });
 
 test('bridgeStatus reports why it is not connected', async () => {
@@ -167,7 +181,7 @@ test('bridgeStatus reports why it is not connected', async () => {
   const bridge = await freshBridge();
   bridge.reconnect();
   await settle();
-  assert.equal(bridge.bridgeStatus().connected, true);
+  assert.equal(bridge.bridgeStatus().connected, false);
 
   h.setLastError({ message: 'Specified native messaging host not found.' });
   h.listeners.disconnect.at(-1)();
@@ -186,7 +200,11 @@ test('repeated failures back off and then cap', async () => {
     h.listeners.disconnect.at(-1)();
   }
   const delays = h.calls.alarms.map((a) => a.delayInMinutes);
-  assert.deepEqual(delays, [0.5, 1, 2, 5, 15, 30, 30, 30], 'a missing app must cost almost nothing');
+  assert.deepEqual(
+    delays,
+    [0.5, 1, 2, 5, 15, 30, 30, 30],
+    'a missing app must cost almost nothing'
+  );
 });
 
 test('a connection that proves itself resets the backoff', async () => {
@@ -199,11 +217,16 @@ test('a connection that proves itself resets the backoff', async () => {
     await settle();
     h.listeners.disconnect.at(-1)();
   }
-  assert.deepEqual(h.calls.alarms.map((a) => a.delayInMinutes), [0.5, 1]);
+  assert.deepEqual(
+    h.calls.alarms.map((a) => a.delayInMinutes),
+    [0.5, 1]
+  );
   h.calls.alarms.length = 0;
 
   // Now a connection that actually carries traffic, then drops.
   bridge.reconnect();
+  await settle();
+  await h.listeners.message.at(-1)({ type: 'hello', version: 2, accepted: true });
   await settle();
   await h.listeners.message.at(-1)({ id: 1, type: 'ping' });
   await settle();
@@ -228,6 +251,8 @@ test('a command gets a reply carrying its id', async () => {
   const bridge = await freshBridge();
   bridge.ensureBridge();
   await settle();
+  await h.listeners.message.at(-1)({ type: 'hello', version: 2, accepted: true });
+  await settle();
   h.calls.posted.length = 0;
 
   await h.listeners.message[0]({ id: 42, type: 'ping' });
@@ -244,6 +269,8 @@ test('an unknown command replies with an error rather than dying', async () => {
   const bridge = await freshBridge();
   bridge.ensureBridge();
   await settle();
+  await h.listeners.message.at(-1)({ type: 'hello', version: 2, accepted: true });
+  await settle();
   h.calls.posted.length = 0;
 
   await h.listeners.message[0]({ id: 7, type: 'launchTheMissiles' });
@@ -259,13 +286,15 @@ test('every command is followed by a fresh state push', async () => {
   const bridge = await freshBridge();
   bridge.ensureBridge();
   await settle();
+  await h.listeners.message.at(-1)({ type: 'hello', version: 2, accepted: true });
+  await settle();
   h.calls.posted.length = 0;
 
   await h.listeners.message[0]({ id: 1, type: 'ping' });
   await settle();
 
   const state = h.calls.posted.find((m) => m.type === 'state');
-  assert.ok(state, 'the app never has to poll');
+  assert.ok(state, 'commands push the resulting state');
   // No token in the fake store, so the engine reports onboarding.
   assert.equal(state.state.stage, 'onboarding');
 });
@@ -274,6 +303,8 @@ test('a command with no id is fire-and-forget, not a crash', async () => {
   const h = fakeChrome();
   const bridge = await freshBridge();
   bridge.ensureBridge();
+  await settle();
+  await h.listeners.message.at(-1)({ type: 'hello', version: 2, accepted: true });
   await settle();
   h.calls.posted.length = 0;
 
@@ -304,6 +335,8 @@ test('openAll names a scope, so no client ever builds a GitHub URL', async () =>
   const bridge = await freshBridge();
   bridge.ensureBridge();
   await settle();
+  await h.listeners.message.at(-1)({ type: 'hello', version: 2, accepted: true });
+  await settle();
   h.calls.posted.length = 0;
 
   await h.listeners.message[0]({ id: 9, type: 'openAll', scope: 'mine' });
@@ -319,6 +352,8 @@ test('an unknown scope fails loudly instead of opening nothing', async () => {
   const bridge = await freshBridge();
   bridge.ensureBridge();
   await settle();
+  await h.listeners.message.at(-1)({ type: 'hello', version: 2, accepted: true });
+  await settle();
   h.calls.posted.length = 0;
 
   await h.listeners.message[0]({ id: 3, type: 'openAll', scope: 'nonsense' });
@@ -327,4 +362,19 @@ test('an unknown scope fails loudly instead of opening nothing', async () => {
   const reply = h.calls.posted.find((m) => m.type === 'reply');
   assert.equal(reply.ok, false);
   assert.match(reply.error.message, /No pull requests loaded/);
+});
+
+test('a send failure schedules recovery even when disconnect arrives afterward', async () => {
+  const h = fakeChrome();
+  const bridge = await freshBridge();
+  bridge.ensureBridge();
+  await h.listeners.message.at(-1)({ type: 'hello', version: 2, accepted: true });
+  await settle();
+  h.calls.posted.push = () => {
+    throw Error('Port disconnected');
+  };
+  await bridge.pushState();
+  h.listeners.disconnect.at(-1)();
+  assert.equal(bridge.bridgeStatus().connected, false);
+  assert.equal(h.calls.alarms.length, 1);
 });

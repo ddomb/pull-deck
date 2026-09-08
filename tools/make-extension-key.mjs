@@ -14,7 +14,7 @@
 // Idempotent: run it once, then never again. Re-running with --force mints a
 // new identity and invalidates every installed host manifest.
 
-import { createHash, generateKeyPairSync } from 'node:crypto';
+import { generateKeyPairSync } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -25,16 +25,16 @@ const manifestPath = join(root, 'manifest.json');
 // The private key is only needed to package a .crx. It is deliberately written
 // outside the repo so it cannot be committed by accident.
 const privateKeyPath = join(
-  homedir(), 'Library', 'Application Support', 'PullDeck', 'extension-signing-key.pem'
+  homedir(),
+  'Library',
+  'Application Support',
+  'PullDeck',
+  'extension-signing-key.pem'
 );
 
-/** Chrome maps each nibble of the first 128 bits of the SHA-256 onto a..p. */
-export function extensionId(derPublicKey) {
-  return [...createHash('sha256').update(derPublicKey).digest().subarray(0, 16)]
-    .flatMap((byte) => [byte >> 4, byte & 0x0f])
-    .map((nibble) => String.fromCharCode(97 + nibble))
-    .join('');
-}
+import { extensionId } from './extension-id.mjs';
+import { generateConfig } from './generate-config.mjs';
+export { extensionId } from './extension-id.mjs';
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
@@ -53,6 +53,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   manifest.key = der.toString('base64');
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+  generateConfig();
 
   mkdirSync(dirname(privateKeyPath), { recursive: true, mode: 0o700 });
   writeFileSync(privateKeyPath, privateKey.export({ type: 'pkcs8', format: 'pem' }));

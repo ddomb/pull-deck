@@ -61,9 +61,10 @@ public enum UnixSocket {
     /// Connect as a client. Throws when nothing is listening — which is the
     /// normal case when the menu bar app is not running.
     public static func connect(to path: String) throws -> Int32 {
+        var addr = try address(path)
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw SocketError.failed("socket", errno: errno) }
-        var addr = try address(path)
+        suppressBrokenPipe(fd: fd)
         let result = withSockaddr(&addr) { pointer, size in
             Darwin.connect(fd, pointer, size)
         }
@@ -77,8 +78,10 @@ public enum UnixSocket {
 
     /// Bind and listen. Removes a stale socket file left by a previous run.
     public static func listen(at path: String, backlog: Int32 = 4) throws -> Int32 {
+        var addr = try address(path)
         try FileManager.default.createDirectory(
-            at: directory, withIntermediateDirectories: true,
+            at: URL(fileURLWithPath: path).deletingLastPathComponent(),
+            withIntermediateDirectories: true,
             // Owner-only: nothing else on the machine should be able to drive this.
             attributes: [.posixPermissions: 0o700]
         )
@@ -86,7 +89,7 @@ public enum UnixSocket {
 
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw SocketError.failed("socket", errno: errno) }
-        var addr = try address(path)
+        suppressBrokenPipe(fd: fd)
         let bound = withSockaddr(&addr) { pointer, size in
             Darwin.bind(fd, pointer, size)
         }
@@ -110,14 +113,22 @@ public enum UnixSocket {
         var chunk = [UInt8](repeating: 0, count: 16 * 1024)
         while true {
             let n = read(fd, &chunk, chunk.count)
-            if n <= 0 { return } // 0 = clean EOF, <0 = error; either way we're done
+            if n < 0 && errno == EINTR { continue }
+            if n <= 0 { return }
             buffer.append(contentsOf: chunk[0..<n])
+            if buffer.count > NativeMessaging.maxFromExtension { return }
             while let newline = buffer.firstIndex(of: 0x0A) {
                 let line = Data(buffer[buffer.startIndex..<newline])
                 buffer = Data(buffer[buffer.index(after: newline)...])
                 if !line.isEmpty { onLine(line) }
             }
         }
+    }
+
+    public static func suppressBrokenPipe(fd: Int32) {
+        var enabled: Int32 = 1
+        _ = setsockopt(
+            fd, SOL_SOCKET, SO_NOSIGPIPE, &enabled, socklen_t(MemoryLayout.size(ofValue: enabled)))
     }
 
     /// Write every byte, retrying short writes.

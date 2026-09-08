@@ -1,16 +1,10 @@
-// The page a shortcut lands on when the answer was not one specific pull
-// request. Reached only by the service worker navigating a tab here, never
-// linked from the web: it is not in web_accessible_resources, so no page can
-// probe for it or read it.
-//
-// This is a real tab rather than the popup, so unlike popup.js it may call the
-// tab APIs directly — nothing tears the document down mid-await. It still asks
-// the worker to do the opening, because openIntoGroup is the one place that
-// knows how not to duplicate a tab.
+// Internal resolver page reached by a declarative redirect. Opening remains
+// worker-owned; this document dismisses itself only after confirmed placement.
 
 import { icons } from './icons.js';
-import { el, glyph, age, badgesFor } from './pr-row.js';
+import { el, glyph, age, badgesFor, rowLabel } from './pr-row.js';
 import { findMatches } from './resolve.js';
+import { shortcutFromLocation } from './shortcut.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -32,6 +26,9 @@ const state = {
   rows: [],
   focusIndex: 0,
   opening: false,
+  status: 'loading',
+  stale: false,
+  active: true,
 };
 
 /* ------------------------------------------------------------------ rows -- */
@@ -60,10 +57,7 @@ function rowFor(pr, index) {
   go.append(glyph(icons.arrowRight));
   row.append(go);
 
-  row.setAttribute(
-    'aria-label',
-    `${pr.title}. ${pr.repo} number ${pr.number}${pr.headRefName ? `, branch ${pr.headRefName}` : ''}.`
-  );
+  row.setAttribute('aria-label', rowLabel(pr, pr.headRefName ? `Branch ${pr.headRefName}` : ''));
 
   row.addEventListener('click', () => open(pr));
   row.addEventListener('focus', () => {
@@ -120,6 +114,7 @@ function say(title, ...subParts) {
 }
 
 function render(result) {
+  state.status = result.status;
   dom.sheet.dataset.state = result.status;
   clearNotice();
 
@@ -128,6 +123,7 @@ function render(result) {
 
   switch (result.status) {
     case 'noToken':
+      state.rows = [];
       say('Connect GitHub first');
       dom.results.replaceChildren();
       showNotice(
@@ -138,6 +134,7 @@ function render(result) {
       return;
 
     case 'error':
+      state.rows = [];
       say('Could not reach GitHub');
       dom.results.replaceChildren();
       showNotice('danger', 'Nothing to search', result.error?.message ?? 'Try again in a moment.');
@@ -152,7 +149,9 @@ function render(result) {
     case 'one':
       say('One match for ', quoted(query));
       renderRows(result.matches);
-      dom.foot.textContent = 'Press ↵ to open it.';
+      dom.foot.textContent = state.stale
+        ? 'This list may be out of date. Select a pull request to open it.'
+        : 'Press ↵ to open it.';
       return;
 
     case 'empty':
@@ -183,32 +182,24 @@ async function open(pr) {
   if (state.opening) return;
   state.opening = true;
   try {
+    const self = await chrome.tabs.getCurrent();
+    if (!state.active) return;
     const reply = await chrome.runtime.sendMessage({
-      type: 'openOne',
-      pullRequest: { id: pr.id, url: pr.url },
+      type: 'openShortcut',
+      prId: pr.id,
     });
+    if (!state.active) return;
     if (!reply?.ok) throw reply?.error ?? new Error('The extension worker did not respond.');
-    await dismissSelf();
+    if (!reply.data?.focused || reply.data?.failures?.length)
+      throw new Error(
+        reply.data?.failures?.[0]?.message ?? 'The pull request could not be focused. Try again.'
+      );
+    // This document owns dismissal. A navigation destroys it and cannot leave a
+    // delayed background command closing the page that replaced it.
+    if (self?.id !== undefined && state.active) await chrome.tabs.remove(self.id);
   } catch (error) {
     state.opening = false;
     dom.foot.textContent = error?.message ?? 'Could not open that pull request.';
-  }
-}
-
-/**
- * Close this tab, having sent the user to the pull request.
- *
- * Not when it is the only tab in its window: closing that closes the window,
- * which is far more than anyone asked a shortcut to do.
- */
-async function dismissSelf() {
-  try {
-    const self = await chrome.tabs.getCurrent();
-    if (!self) return;
-    const siblings = await chrome.tabs.query({ windowId: self.windowId });
-    if (siblings.length > 1) await chrome.tabs.remove(self.id);
-  } catch {
-    // Leaving the page up is a fine outcome; the pull request is already open.
   }
 }
 
@@ -247,7 +238,7 @@ function wire() {
       filter(dom.input.value);
       // Enter only commits when there is exactly one answer. With several on
       // screen it would be a coin toss dressed up as a shortcut.
-      if (state.rows.length === 1) state.rows[0].click();
+      if (state.status === 'one' && !state.stale && state.rows.length === 1) state.rows[0].click();
       else if (state.rows.length > 1) state.rows[0].focus();
       return;
     }
@@ -275,7 +266,8 @@ function wire() {
 }
 
 async function start() {
-  const query = new URLSearchParams(location.search).get('q') ?? '';
+  const shortcut = shortcutFromLocation(location);
+  const query = shortcut?.query ?? new URLSearchParams(location.search).get('q') ?? '';
   dom.input.value = query;
 
   let result;
@@ -288,7 +280,20 @@ async function start() {
   }
 
   state.all = result.all ?? [];
+  state.stale = Boolean(result.stale) || Object.values(result.truncated ?? {}).some(Boolean);
   render(result);
+  if (state.stale)
+    showNotice(
+      'neutral',
+      'List may be incomplete',
+      result.error?.message ??
+        'The cached list is old or limited to 50 results per scope. Select a result explicitly or refresh in the popup.'
+    );
+
+  if (shortcut && result.status === 'one' && !state.stale && state.active) {
+    await open(result.matches[0]);
+    return;
+  }
 
   // Focus the field, caret at the end: the common case after a miss is fixing a
   // typo, not retyping the whole thing. The states with nothing to search hide
@@ -300,4 +305,11 @@ async function start() {
 }
 
 wire();
+window.addEventListener(
+  'pagehide',
+  () => {
+    state.active = false;
+  },
+  { once: true }
+);
 start();

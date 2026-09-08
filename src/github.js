@@ -18,9 +18,9 @@ export const SCOPES = /** @type {const} */ (['mine', 'reviewing', 'assigned']);
 const DOCUMENT = `
 query PullDeck($mine: String!, $reviewing: String!, $assigned: String!, $first: Int!) {
   viewer { login avatarUrl(size: 64) }
-  mine: search(query: $mine, type: ISSUE, first: $first) { nodes { ...PullDeckPR } }
-  reviewing: search(query: $reviewing, type: ISSUE, first: $first) { nodes { ...PullDeckPR } }
-  assigned: search(query: $assigned, type: ISSUE, first: $first) { nodes { ...PullDeckPR } }
+  mine: search(query: $mine, type: ISSUE, first: $first) { pageInfo { hasNextPage } nodes { ...PullDeckPR } }
+  reviewing: search(query: $reviewing, type: ISSUE, first: $first) { pageInfo { hasNextPage } nodes { ...PullDeckPR } }
+  assigned: search(query: $assigned, type: ISSUE, first: $first) { pageInfo { hasNextPage } nodes { ...PullDeckPR } }
   rateLimit { remaining limit resetAt cost }
 }
 
@@ -44,7 +44,7 @@ fragment PullDeckPR on PullRequest {
 /** Failure the UI can act on, rather than a generic throw. */
 export class GitHubError extends Error {
   /**
-   * @param {'badToken'|'forbidden'|'rateLimited'|'offline'|'server'|'malformed'} kind
+   * @param {'badToken'|'forbidden'|'rateLimited'|'offline'|'server'|'malformed'|'partial'|'timeout'} kind
    * @param {string} message
    * @param {{retryAt?: Date}} [extra]
    */
@@ -57,12 +57,13 @@ export class GitHubError extends Error {
 }
 
 function parseRetryAt(headers) {
-  const reset = headers.get('x-ratelimit-reset');
-  if (reset && /^\d+$/.test(reset)) return new Date(Number(reset) * 1000);
   const retryAfter = headers.get('retry-after');
   if (retryAfter && /^\d+$/.test(retryAfter)) {
     return new Date(Date.now() + Number(retryAfter) * 1000);
   }
+  const reset = headers.get('x-ratelimit-reset');
+  if (headers.get('x-ratelimit-remaining') === '0' && reset && /^\d+$/.test(reset))
+    return new Date(Number(reset) * 1000);
   return undefined;
 }
 
@@ -72,8 +73,27 @@ function parseRetryAt(headers) {
  * @param {{first?: number, signal?: AbortSignal}} [options]
  */
 export async function fetchPullRequests(token, options = {}) {
-  const { first = 50, signal } = options;
+  const { first = 50, signal, timeoutMs = 15_000 } = options;
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  if (signal?.aborted) abort();
+  const timeout = setTimeout(abort, timeoutMs);
 
+  try {
+    return await requestPullRequests(token, first, controller.signal);
+  } catch (error) {
+    if (signal?.aborted) throw new DOMException('Request superseded.', 'AbortError');
+    if (controller.signal.aborted)
+      throw new GitHubError('timeout', 'GitHub did not respond within 15 seconds. Try again.');
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener('abort', abort);
+  }
+}
+
+async function requestPullRequests(token, first, signal) {
   let response;
   try {
     response = await fetch(ENDPOINT, {
@@ -97,54 +117,62 @@ export async function fetchPullRequests(token, options = {}) {
   if (response.status === 401) {
     throw new GitHubError('badToken', 'GitHub rejected this token.');
   }
-  if (response.status === 403 || response.status === 429) {
-    const retryAt = parseRetryAt(response.headers);
-    // 403 is overloaded: exhausted budget vs. a token missing a scope.
-    throw new GitHubError(
-      retryAt ? 'rateLimited' : 'forbidden',
-      retryAt ? 'GitHub rate limit reached.' : 'This token is not allowed to read those repositories.',
-      { retryAt }
-    );
-  }
-  if (!response.ok) {
-    throw new GitHubError('server', `GitHub returned ${response.status}.`);
-  }
-
   let payload;
   try {
     payload = await response.json();
   } catch {
+    if (!response.ok) throw new GitHubError('server', `GitHub returned ${response.status}.`);
     throw new GitHubError('malformed', 'GitHub sent a response Pull Deck could not read.');
   }
 
+  const errors = Array.isArray(payload?.errors) ? payload.errors : [];
+  const types = errors.map((e) => e?.type);
+  const messages = [payload?.message, ...errors.map((e) => e?.message)].filter(Boolean).join(' ');
+  const limited =
+    response.status === 429 ||
+    ((!response.ok || errors.length > 0) &&
+      response.headers.get('x-ratelimit-remaining') === '0') ||
+    types.includes('RATE_LIMITED') ||
+    /secondary rate limit|abuse detection/i.test(messages);
+  if (limited)
+    throw new GitHubError('rateLimited', 'GitHub rate limit reached.', {
+      retryAt: parseRetryAt(response.headers) ?? new Date(Date.now() + 60_000),
+    });
+  if (response.status === 403)
+    throw new GitHubError('forbidden', 'This token is not allowed to read those repositories.');
+  if (!response.ok) throw new GitHubError('server', `GitHub returned ${response.status}.`);
+
   // GraphQL reports most failures inside a 200.
-  if (Array.isArray(payload.errors) && payload.errors.length > 0) {
-    const types = payload.errors.map((e) => e?.type).filter(Boolean);
-    const first = payload.errors[0]?.message || 'GitHub rejected the query.';
-    if (types.includes('RATE_LIMITED')) throw new GitHubError('rateLimited', 'GitHub rate limit reached.');
+  if (errors.length > 0) {
+    const first = errors[0]?.message || 'GitHub rejected the query.';
     if (types.includes('FORBIDDEN') || types.includes('INSUFFICIENT_SCOPES')) {
       throw new GitHubError('forbidden', first);
     }
-    // Partial data with only field-level errors is still usable; a missing
-    // `data` block is not.
     if (!payload.data?.viewer) throw new GitHubError('malformed', first);
+    throw new GitHubError(
+      'partial',
+      'GitHub returned incomplete pull request data. The last complete list is retained.'
+    );
   }
 
-  const data = payload.data;
+  const data = payload?.data;
   if (!data?.viewer?.login) {
     throw new GitHubError('malformed', 'GitHub did not return an account for this token.');
   }
 
-  const scopes = {};
+  const scopes = {},
+    truncated = {};
   for (const scope of SCOPES) {
-    scopes[scope] = (data[scope]?.nodes ?? [])
-      .filter((node) => node && node.number)
-      .map(normalize);
+    if (!Array.isArray(data[scope]?.nodes))
+      throw new GitHubError('partial', `GitHub did not return the ${scope} list. Try again.`);
+    truncated[scope] = Boolean(data[scope].pageInfo?.hasNextPage);
+    scopes[scope] = data[scope].nodes.filter((node) => node && node.number).map(normalize);
   }
 
   return {
     viewer: { login: data.viewer.login, avatarUrl: data.viewer.avatarUrl },
     scopes,
+    truncated,
     rateLimit: data.rateLimit ?? null,
     fetchedAt: Date.now(),
   };

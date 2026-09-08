@@ -1,5 +1,6 @@
-import SwiftUI
 import PullDeckKit
+import PullDeckRuntime
+import SwiftUI
 
 /// The panel. Same grammar as the extension popup — grouped inset rows,
 /// hairline separators, glyph-plus-word status, one accent — expressed in
@@ -7,7 +8,7 @@ import PullDeckKit
 struct MenuContent: View {
     @ObservedObject var bridge: BridgeServer
 
-    private let accent = Color(red: 0.0, green: 0.467, blue: 0.447) // oklch(50% .118 190)
+    private let accent = Color(red: 0.0, green: 0.467, blue: 0.447)  // oklch(50% .118 190)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,10 +21,13 @@ struct MenuContent: View {
                 notice(
                     symbol: "key",
                     title: "Connect GitHub",
-                    body: "Open the Pull Deck extension in Chrome and paste a personal access token. The token stays there."
+                    body:
+                        "Open the Pull Deck extension in Chrome and paste a personal access token. The token stays there."
                 )
             } else if let error = bridge.state?.error {
-                notice(symbol: "exclamationmark.triangle", title: "GitHub said no", body: error.message)
+                notice(
+                    symbol: "exclamationmark.triangle", title: "GitHub said no", body: error.message
+                )
             } else {
                 scopePicker
                 list
@@ -101,7 +105,8 @@ struct MenuContent: View {
                         .padding(.vertical, 40)
                         .padding(.horizontal, 24)
                 } else {
-                    ForEach(Array(bridge.pullRequests.enumerated()), id: \.element.id) { index, pr in
+                    ForEach(Array(bridge.pullRequests.enumerated()), id: \.element.id) {
+                        index, pr in
                         if index > 0 { Divider().padding(.leading, 14) }
                         row(pr)
                     }
@@ -183,22 +188,32 @@ struct MenuContent: View {
         }
     }
 
-    private struct Badge { let symbol: String; let text: String; let color: Color }
+    private struct Badge {
+        let symbol: String
+        let text: String
+        let color: Color
+    }
 
     private func badgeItems(_ pr: PullRequest) -> [Badge] {
         var out: [Badge] = []
-        if pr.isDraft { out.append(Badge(symbol: "circle.dashed", text: "Draft", color: .secondary)) }
+        if pr.isDraft {
+            out.append(Badge(symbol: "circle.dashed", text: "Draft", color: .secondary))
+        }
         switch pr.reviewDecision {
-        case "APPROVED": out.append(Badge(symbol: "checkmark.circle", text: "Approved", color: .green))
-        case "CHANGES_REQUESTED": out.append(Badge(symbol: "minus.circle", text: "Changes", color: .red))
+        case "APPROVED":
+            out.append(Badge(symbol: "checkmark.circle", text: "Approved", color: .green))
+        case "CHANGES_REQUESTED":
+            out.append(Badge(symbol: "minus.circle", text: "Changes", color: .red))
         case "REVIEW_REQUIRED" where !pr.isDraft:
             out.append(Badge(symbol: "clock", text: "In review", color: .secondary))
         default: break
         }
         // Only non-passing checks earn a badge; a green tick on every row is noise.
         switch pr.checks {
-        case "FAILURE", "ERROR": out.append(Badge(symbol: "xmark", text: "Checks failed", color: .red))
-        case "PENDING", "EXPECTED": out.append(Badge(symbol: "circle.dotted", text: "Checks running", color: .orange))
+        case "FAILURE", "ERROR":
+            out.append(Badge(symbol: "xmark", text: "Checks failed", color: .red))
+        case "PENDING", "EXPECTED":
+            out.append(Badge(symbol: "circle.dotted", text: "Checks running", color: .orange))
         default: break
         }
         return out
@@ -209,16 +224,19 @@ struct MenuContent: View {
     private var dock: some View {
         VStack(spacing: 6) {
             Divider()
-            Button(action: bridge.openAll) {
+            Button(action: { bridge.openAll() }) {
                 HStack(spacing: 6) {
-                    if let progress = bridge.progress, let done = progress.done, let total = progress.total {
+                    if let progress = bridge.progress, let done = progress.done,
+                        let total = progress.total
+                    {
                         Text("Opening \(done) of \(total)…")
-                    } else if bridge.pending.isEmpty {
-                        Text(bridge.pullRequests.isEmpty
-                             ? "Nothing to open"
-                             : "All \(bridge.pullRequests.count) in “\(bridge.groupTitle)”")
+                    } else if bridge.pendingPullRequests.isEmpty {
+                        Text(
+                            bridge.pullRequests.isEmpty
+                                ? "Nothing to open"
+                                : "All \(bridge.pullRequests.count) in “\(bridge.groupTitle)”")
                     } else {
-                        Text("Open \(bridge.pending.count) in “\(bridge.groupTitle)”")
+                        Text("Open \(bridge.pendingPullRequests.count) in “\(bridge.groupTitle)”")
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -226,7 +244,7 @@ struct MenuContent: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(accent)
-            .disabled(bridge.pending.isEmpty || bridge.progress != nil)
+            .disabled(bridge.pendingPullRequests.isEmpty || bridge.isOpening)
             .padding(.horizontal, 14)
             .padding(.top, 8)
 
@@ -239,9 +257,12 @@ struct MenuContent: View {
 
     private var footnote: String {
         if let failure = bridge.lastFailure { return failure }
+        if bridge.state?.truncated?[bridge.scope.rawValue] == true {
+            return "Showing the 50 most recently updated pull requests."
+        }
         if bridge.state?.group?.otherWindow == true { return "The group lives in another window." }
-        let already = bridge.pullRequests.count - bridge.pending.count
-        if already > 0 && !bridge.pending.isEmpty {
+        let already = bridge.pullRequests.count - bridge.pendingPullRequests.count
+        if already > 0 && !bridge.pendingPullRequests.isEmpty {
             return "\(already) already there, so \(already == 1 ? "it stays" : "they stay") put."
         }
         return " "
@@ -288,17 +309,21 @@ struct MenuContent: View {
                 }
                 .controlSize(.small)
 
-                Text(bridge.browsersNeedingReload.isEmpty
-                     ? "Turn on Developer mode, choose Load unpacked, and pick the revealed folder. The bridge installs itself the moment it appears."
-                     : "Pull Deck is loaded, but under an id from before the id was pinned — Chromium keeps whatever id an extension had when it was loaded. Press the reload arrow on its card and this sorts itself out.")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    bridge.browsersNeedingReload.isEmpty
+                        ? "Turn on Developer mode, choose Load unpacked, and pick the revealed folder. The bridge installs itself the moment it appears."
+                        : "Pull Deck is loaded, but under an id from before the id was pinned — Chromium keeps whatever id an extension had when it was loaded. Press the reload arrow on its card and this sorts itself out."
+                )
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             } else if bridge.bridgeInstalled {
-                Text("If this persists, open the extension and use Retry now — it may still be waiting out a backoff.")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "If this persists, open the extension and use Retry now — it may still be waiting out a backoff."
+                )
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.horizontal, 16)

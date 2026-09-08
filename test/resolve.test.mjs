@@ -41,7 +41,11 @@ test('the path prefix is optional and interchangeable', () => {
 test('both spellings and the reserved-TLD form all work', () => {
   for (const host of ['pull-dock', 'pull-deck', 'pulldeck', 'pulldock']) {
     assert.equal(parseShortcut(`http://${host}/pr/abv-4242`)?.query, 'abv-4242', host);
-    assert.equal(parseShortcut(`http://${host}.test/pr/abv-4242`)?.query, 'abv-4242', `${host}.test`);
+    assert.equal(
+      parseShortcut(`http://${host}.test/pr/abv-4242`)?.query,
+      'abv-4242',
+      `${host}.test`
+    );
   }
 });
 
@@ -86,7 +90,13 @@ test('a truncated ticket id matches nothing', () => {
 });
 
 test('the separators branch names actually use all count as boundaries', () => {
-  for (const branch of ['ABV-4242', 'feat/ABV-4242', 'ABV-4242-fix', 'ABV-4242_fix', 'x/ABV-4242/y']) {
+  for (const branch of [
+    'ABV-4242',
+    'feat/ABV-4242',
+    'ABV-4242-fix',
+    'ABV-4242_fix',
+    'x/ABV-4242/y',
+  ]) {
     assert.equal(containsToken(branch, 'abv-4242'), true, branch);
   }
 });
@@ -122,6 +132,16 @@ const LIST = [
     headRefName: 'ddomb/ABV-7777-infra',
   }),
 ];
+
+test('the public matcher never falls back to partial ticket matches', () => {
+  assert.equal(findMatches('abv-424', [pr()]).status, 'none');
+  assert.equal(findMatches('abv-4242', [pr({ headRefName: 'feat/ABV-42421' })]).status, 'none');
+});
+
+test('explicit PR numbers and qualified repositories do not become text searches', () => {
+  assert.equal(findMatches('42', [pr({ title: 'Fix ticket 42', number: 99 })]).status, 'none');
+  assert.equal(findMatches('wrong#99', [pr({ title: 'wrong#99', number: 99 })]).status, 'none');
+});
 
 test('the example from the request resolves to exactly one pull request', () => {
   const found = findMatches('abv-4242', LIST);
@@ -172,9 +192,9 @@ test('a branch match beats a title match', () => {
   assert.equal(found.matches[0].id, 'branch');
 });
 
-test('a loose substring only wins when nothing matched properly', () => {
+test('a malformed ticket suffix cannot win as a loose substring', () => {
   const list = [pr({ id: 'loose', number: 1, headRefName: 'ddomb/ABV-4242fix', title: 'Session' })];
-  assert.equal(findMatches('abv-4242', list).matches[0].id, 'loose');
+  assert.equal(findMatches('abv-4242', list).status, 'none');
 
   // ...but never over a real token match elsewhere in the list.
   const mixed = [...list, pr({ id: 'token', number: 2, headRefName: 'ddomb/ABV-4242-fix' })];
@@ -199,7 +219,7 @@ test('an empty query asks for everything rather than matching nothing', () => {
 test('a cache written before branch names existed cannot invent a match', () => {
   // Every PR here predates headRefName. Nothing must match on branch, and
   // nothing must throw. app-state.js refetches on exactly this shape.
-  const old = LIST.map(({ headRefName, ...rest }) => rest);
+  const old = LIST.map(({ headRefName: _headRefName, ...rest }) => rest);
   assert.equal(findMatches('abv-4242', old).status, 'none');
   assert.equal(findMatches('6081', old).status, 'one', 'numbers still work');
 });
