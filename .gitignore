@@ -1,6 +1,10 @@
 # Generated dev-only preview harness (regenerate with: npm run preview)
 .claude/tmp/
 
+# Local agent tooling state
+.claude/launch.json
+.omc/
+
 # Swift build products
 macos/.build/
 macos/build/
