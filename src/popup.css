@@ -256,6 +256,10 @@ svg {
   height: 100%;
   position: relative;
   isolation: isolate;
+  /* The closed settings panel is parked at translateX(100%), which makes the
+     document 800px wide. Body's own overflow propagates to the viewport and
+     clips nothing, so the clip has to live here. */
+  overflow: hidden;
 }
 
 /* Explicit rows, not auto-placement. Hiding the segments with `display: none`
