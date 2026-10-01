@@ -34,7 +34,10 @@ struct MenuContent: View {
                 dock
             }
         }
+        // The panel window keeps the height it was first measured at, so a
+        // panel opened on the short setup state would squeeze the list flat.
         .frame(width: 380)
+        .frame(minHeight: 420, alignment: .top)
         .background(Color(nsColor: .windowBackgroundColor))
         // Live only while the panel is actually on screen.
         .onAppear { bridge.setPanelVisible(true) }
