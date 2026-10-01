@@ -10,6 +10,10 @@
 // the long-running menu bar app. When the port dies, the relay dies with it and
 // the app loses its channel with no way to get it back — nothing will relaunch
 // it but us. Hence the reconnect loop below; it is not optional polish.
+//
+// A relay that finds the app closed does not exit. It reports `waiting` and
+// holds the port until the app's socket appears, which is how opening the app
+// attaches without anything on this side having to notice.
 
 import {
   loadState,
@@ -35,9 +39,9 @@ const PROTOCOL_VERSION = BRIDGE_PROTOCOL_VERSION;
 // soon as it sees the extension, retrying promptly is what closes the setup
 // loop without the user reloading anything.
 //
-// Anything else means the relay actually ran and then went away (usually: the
-// app is not running). That is a real process spawn per attempt, so it earns a
-// climbing backoff.
+// Anything else means the relay actually ran and then went away (the app
+// refused this profile, or the two builds do not match). That is a real process
+// spawn per attempt, so it earns a climbing backoff.
 const CHEAP_RETRY_MINUTES = 1;
 const BACKOFF_MINUTES = [0.5, 1, 2, 5, 15, 30];
 const NOTHING_SPAWNED = /not found|forbidden/i;
@@ -47,6 +51,8 @@ let attempt = 0;
 let lastReason = null;
 let detachProgress = null;
 let accepted = false;
+// The relay is up but the menu bar app is not; the port stays open for it.
+let waiting = false;
 let handshakeTimer = null;
 
 /** Idempotent: safe to call on every service worker start. */
@@ -68,6 +74,7 @@ function openPort() {
 
   port = opened;
   accepted = false;
+  waiting = false;
   const connectionId = crypto.randomUUID();
   // Note: the backoff counter is NOT reset here. connectNative() hands back a
   // Port synchronously even when no host exists — the failure only surfaces
@@ -113,6 +120,7 @@ function teardown() {
   clearTimeout(handshakeTimer);
   handshakeTimer = null;
   accepted = false;
+  waiting = false;
   port = null;
   if (detachProgress) {
     detachProgress();
@@ -122,6 +130,7 @@ function teardown() {
 
 function failConnection(target, reason) {
   if (port !== target) return;
+  const wasLive = accepted;
   lastReason = reason ?? null;
   teardown();
   try {
@@ -129,7 +138,11 @@ function failConnection(target, reason) {
   } catch {
     /* already disconnected */
   }
-  scheduleReconnect(reason);
+  // A connection the app had accepted usually ends because the app quit. The
+  // replacement relay waits for it, so reopening the app attaches immediately
+  // rather than after the alarm.
+  if (wasLive) openPort();
+  else scheduleReconnect(reason);
 }
 
 function scheduleReconnect(reason) {
@@ -146,7 +159,11 @@ function scheduleReconnect(reason) {
 
 /** What the popup shows, and why it is not connected. */
 export function bridgeStatus() {
-  return { connected: accepted, connecting: Boolean(port) && !accepted, reason: lastReason };
+  return {
+    connected: accepted,
+    connecting: Boolean(port) && !accepted && !waiting,
+    reason: lastReason,
+  };
 }
 
 /** Skip whatever backoff is pending and try right now. */
@@ -190,6 +207,16 @@ export async function pushState() {
 }
 
 async function handleMessage(message, target, connectionId) {
+  if (message?.type === 'waiting') {
+    // Sent by the relay itself. No handshake can finish until the app opens,
+    // so the deadline would only tear down the one port that can reach it.
+    clearTimeout(handshakeTimer);
+    handshakeTimer = null;
+    waiting = true;
+    attempt = 0;
+    lastReason = 'Pull Deck.app is not open.';
+    return;
+  }
   if (message?.type === 'hello') {
     clearTimeout(handshakeTimer);
     handshakeTimer = null;
@@ -202,6 +229,7 @@ async function handleMessage(message, target, connectionId) {
       return;
     }
     accepted = true;
+    waiting = false;
     attempt = 0;
     lastReason = null;
     await pushState();

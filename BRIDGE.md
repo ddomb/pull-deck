@@ -14,6 +14,8 @@ The relay holds no account state. The GitHub token remains in the extension. The
 
 The extension sends `{type:"hello", version:2, extensionId}`. The app replies `{type:"hello", version:2, accepted:true}` only when both identity and protocol match. State/commands are processed only after acceptance. A second client receives `accepted:false` with a reason and is disconnected; it never waits silently in an unserviced socket backlog. The extension reports “connecting” until acceptance and retries failed/expired handshakes.
 
+When the companion is not running, the relay stays alive. It sends Chrome `{type:"waiting"}`, leaves the extension's `hello` unread in its stdin pipe, and retries the socket every 250 ms; once the companion listens, the queued `hello` is forwarded and the handshake completes on the same port. The extension treats `waiting` as “not running”, cancels its handshake deadline, and keeps the port. When an accepted connection drops, the extension opens a new port immediately, so a relay is already waiting when the companion reopens. The reconnect alarm covers only connections that were never accepted.
+
 Only one browser profile is active. A connection object owns descriptor lifetime, bounded writes, and shutdown. Incoming callbacks, pending commands, progress, and state delivery are tied to that connection. Detach clears all pending/busy state before a replacement can attach.
 
 ## Framing

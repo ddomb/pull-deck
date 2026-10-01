@@ -90,18 +90,6 @@ log("launched by \(callerOrigin)")
 
 let socketPath = ProcessInfo.processInfo.environment["PULLDECK_SOCKET"] ?? UnixSocket.defaultPath
 
-let socketFD: Int32
-do {
-    socketFD = try UnixSocket.connect(to: socketPath)
-} catch {
-    // The overwhelmingly common case: the menu bar app is not running. Exiting
-    // cleanly makes Chrome close the port, which the extension sees as a
-    // disconnect and retries later with backoff.
-    log("menu bar app not reachable at \(socketPath) — \(error)")
-    exit(0)
-}
-log("attached to \(socketPath)")
-
 let stdinFD = FileHandle.standardInput.fileDescriptor
 let stdoutFD = FileHandle.standardOutput.fileDescriptor
 
@@ -120,6 +108,31 @@ func writeToChrome(_ payload: Data) {
         log("dropping outbound message: \(error)")
     }
 }
+
+/// The app cannot reach into Chrome, so when it is not running the relay parks
+/// here and attaches the moment its socket appears. Exiting instead would leave
+/// the extension's retry alarm as the only way back, and that is 30 seconds at
+/// best. stdin is watched but not read: the extension's hello stays queued in
+/// the pipe for the app.
+func waitForApp() -> Int32 {
+    if let fd = try? UnixSocket.connect(to: socketPath) { return fd }
+    log("menu bar app not reachable at \(socketPath) — waiting for it")
+    writeToChrome(Data(#"{"type":"waiting"}"#.utf8))
+    // The queued hello keeps the pipe readable, so poll returns at once and
+    // the sleep is what paces the loop.
+    var chrome = pollfd(fd: stdinFD, events: Int16(POLLIN), revents: 0)
+    while true {
+        if poll(&chrome, 1, 0) > 0, chrome.revents & Int16(POLLHUP | POLLERR | POLLNVAL) != 0 {
+            log("chrome closed stdin while waiting")
+            exit(0)
+        }
+        usleep(250_000)
+        if let fd = try? UnixSocket.connect(to: socketPath) { return fd }
+    }
+}
+
+let socketFD = waitForApp()
+log("attached to \(socketPath)")
 
 // App → Chrome. Newline-delimited JSON in, framed JSON out.
 let appToChrome = Thread {

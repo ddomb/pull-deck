@@ -231,7 +231,10 @@ test('a connection that proves itself resets the backoff', async () => {
   await h.listeners.message.at(-1)({ id: 1, type: 'ping' });
   await settle();
   h.listeners.disconnect.at(-1)();
+  assert.equal(h.calls.alarms.length, 0, 'a channel that worked is reopened at once');
 
+  // The replacement dies too, without ever being accepted.
+  h.listeners.disconnect.at(-1)();
   assert.equal(
     h.calls.alarms.at(-1).delayInMinutes,
     0.5,
@@ -377,4 +380,38 @@ test('a send failure schedules recovery even when disconnect arrives afterward',
   h.listeners.disconnect.at(-1)();
   assert.equal(bridge.bridgeStatus().connected, false);
   assert.equal(h.calls.alarms.length, 1);
+});
+
+test('a relay waiting for the app reports not running instead of connecting', async () => {
+  const h = fakeChrome();
+  const bridge = await freshBridge();
+  bridge.ensureBridge();
+  h.listeners.message.at(-1)({ type: 'waiting' });
+  await settle();
+
+  const status = bridge.bridgeStatus();
+  assert.equal(status.connected, false);
+  assert.equal(status.connecting, false);
+  assert.match(status.reason, /not open/);
+  assert.equal(h.calls.alarms.length, 0, 'the parked port is the retry');
+
+  // The app opens: the same port completes the handshake.
+  h.listeners.message.at(-1)({ type: 'hello', version: 2, accepted: true });
+  await settle();
+  assert.equal(bridge.bridgeStatus().connected, true);
+  assert.equal(h.calls.connects, 1);
+});
+
+test('losing a live connection reconnects at once, not on an alarm', async () => {
+  const h = fakeChrome();
+  const bridge = await freshBridge();
+  bridge.ensureBridge();
+  h.listeners.message.at(-1)({ type: 'hello', version: 2, accepted: true });
+  await settle();
+
+  h.setLastError({ message: 'Native host has exited.' });
+  h.listeners.disconnect.at(-1)();
+
+  assert.equal(h.calls.connects, 2);
+  assert.equal(h.calls.alarms.length, 0);
 });
