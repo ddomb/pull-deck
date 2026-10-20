@@ -204,24 +204,31 @@ export const register: Register = on => {
                 backgroundColor={inGroup ? ACCENT_TINT : undefined}
                 hover={{ backgroundColor: 'rgba(127, 127, 127, 0.12)' }}
               >
+                {/* The whole row is one Button: it may hold only strings and Text, so
+                    the meta line and chips are Text runs after line breaks. */}
                 <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
-                  <Button key={`pr-${pr.id}`} plain dimColor={Boolean(busy) && busy !== pr.id} onPress={() => open(pr.id)}>
-                    <Text weight="semibold" wrap="wrap">{busy === pr.id ? `Opening… ${pr.title}` : pr.title}</Text>
+                  <Button
+                    key={`pr-${pr.id}`}
+                    plain
+                    dimColor={Boolean(busy) && busy !== pr.id}
+                    onPress={() => open(pr.id)}
+                  >
+                    <Text weight="semibold" wrap="wrap">
+                      {busy === pr.id ? `Opening… ${pr.title}` : pr.title}
+                    </Text>
+                    {'\n'}
+                    <Text size="caption" dimColor>
+                      {`${pr.repo} #${pr.number} ${age(pr.updatedAt, now)} `}
+                    </Text>
+                    <Text size="caption" color="success">{`+${pr.additions.toLocaleString('en-US')} `}</Text>
+                    <Text size="caption" color="error">{`−${pr.deletions.toLocaleString('en-US')}`}</Text>
+                    {badges.length > 0 && '\n'}
+                    {badges.map(chip => (
+                      <Text size="caption" weight="medium" color={chip.color} backgroundColor={CHIP_TINT[chip.color]}>
+                        {` ${chip.glyph} ${chip.text} `}
+                      </Text>
+                    ))}
                   </Button>
-                  <Text size="caption" dimColor>
-                    {pr.repo} #{pr.number} {age(pr.updatedAt, now)}{' '}
-                    <Text color="success">+{pr.additions.toLocaleString('en-US')}</Text>{' '}
-                    <Text color="error">−{pr.deletions.toLocaleString('en-US')}</Text>
-                  </Text>
-                  {badges.length > 0 && (
-                    <Box flexDirection="row" gap={1} marginTop={1}>
-                      {badges.map(chip => (
-                        <Text size="caption" weight="medium" color={chip.color} backgroundColor={CHIP_TINT[chip.color]}>
-                          {` ${chip.glyph} ${chip.text} `}
-                        </Text>
-                      ))}
-                    </Box>
-                  )}
                 </Box>
                 {inGroup && icon(CHECK_ICON, `Already in ${current.groupTitle}`, 16, '✓')}
               </Box>
