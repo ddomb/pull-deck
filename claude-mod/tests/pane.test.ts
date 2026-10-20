@@ -110,7 +110,7 @@ test('a failed open is told as a toast', async ($, on) => {
   })
   await openPane($)
   const ui = await $.ui.mount({ plugin: 'pull-deck', surface: 'terminal', ...PANE })
-  await ui.press({ key: 'pr-PR_1' })
+  await ui.press({ key: 'meta-PR_1' })
   expect(seen.toasts).toEqual(['Tab could not be grouped.'])
 })
 
