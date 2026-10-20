@@ -109,7 +109,7 @@ export const register: Register = on => {
             </Text>
           )}
         </Box>
-        <Button key="refresh" plain label="↻" hotkey="g" onPress={refresh} />
+        <Button key="refresh" plain label="↻" onPress={refresh} />
       </Box>
     )
     const notice = (title: string, body: string, color?: 'warning' | 'error') => (
@@ -164,27 +164,27 @@ export const register: Register = on => {
       <Box flexDirection="column" gap={1}>
         {header}
         <Box flexDirection="row" borderStyle="round" borderColor="subtle">
-          {SCOPES.map(({ scope: s, label, hotkey }) => {
+          {SCOPES.map(({ scope: s, label }) => {
             const count = current.scopes[s].length
             return (
               <Box
                 key={`tab-${s}`}
                 flexGrow={1}
                 justifyContent="center"
+                alignItems="center"
                 backgroundColor={s === scope ? 'rgba(127, 127, 127, 0.28)' : undefined}
               >
                 <Button
                   key={`scope-${s}`}
                   plain
                   label={count > 0 ? `${label}  ${count}` : label}
-                  hotkey={hotkey}
                   onPress={() => choose(s)}
                 />
               </Box>
             )
           })}
         </Box>
-        <Box flexDirection="column" borderStyle="round" borderColor="subtle">
+        <Box flexDirection="column" borderStyle="round" borderColor="subtle" overflow="hidden">
           {rows.length === 0 && (
             <Box padding={1}>
               <Text dimColor>No open pull requests here.</Text>
@@ -200,12 +200,13 @@ export const register: Register = on => {
                 gap={1}
                 paddingX={1}
                 paddingY={1}
+                overflow="hidden"
                 backgroundColor={inGroup ? ACCENT_TINT : undefined}
                 hover={{ backgroundColor: 'rgba(127, 127, 127, 0.12)' }}
               >
-                <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+                <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
                   <Button key={`pr-${pr.id}`} plain dimColor={Boolean(busy) && busy !== pr.id} onPress={() => open(pr.id)}>
-                    <Text weight="semibold">{busy === pr.id ? `Opening… ${pr.title}` : pr.title}</Text>
+                    <Text weight="semibold" wrap="wrap">{busy === pr.id ? `Opening… ${pr.title}` : pr.title}</Text>
                   </Button>
                   <Text size="caption" dimColor>
                     {pr.repo} #{pr.number} {age(pr.updatedAt, now)}{' '}
@@ -228,14 +229,22 @@ export const register: Register = on => {
           })}
         </Box>
         <Box flexDirection="column" alignItems="center" gap={1}>
-          <Button
-            key="open-all"
-            variant="primary"
-            label={busy === '*' ? 'Opening…' : dockLabel(rows.length, pending, current.groupTitle)}
-            hotkey="o"
-            dimColor={pending === 0 || Boolean(busy)}
-            onPress={openAll}
-          />
+          <Box
+            key="dock"
+            width="100%"
+            justifyContent="center"
+            alignItems="center"
+            borderStyle="round"
+            borderColor={ACCENT}
+            backgroundColor={pending === 0 || busy ? 'rgba(0, 119, 114, 0.45)' : ACCENT}
+            hover={{ backgroundColor: '#008a84' }}
+          >
+            <Button key="open-all" plain onPress={openAll}>
+              <Text color="#ffffff" weight="medium">
+                {busy === '*' ? 'Opening…' : dockLabel(rows.length, pending, current.groupTitle)}
+              </Text>
+            </Button>
+          </Box>
           {(note || current.isStale || current.warning) && (
             <Text size="caption" dimColor>
               {[note, current.isStale ? 'The list may be out of date.' : '', current.warning ?? '']
