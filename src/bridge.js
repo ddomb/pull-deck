@@ -6,14 +6,14 @@
 // process per connectNative() call, and kills it on disconnect.
 //
 // So the extension reaches out and holds the channel open. The host executable
-// is a thin relay that forwards between this port and a Unix socket owned by
-// the long-running menu bar app. When the port dies, the relay dies with it and
-// the app loses its channel with no way to get it back — nothing will relaunch
-// it but us. Hence the reconnect loop below; it is not optional polish.
+// is a relay: it answers this side's handshake itself, then multiplexes the
+// port between the long-running menu bar app (when it is open) and local
+// viewers such as the Claude Code mod. When the port dies, the relay dies with
+// it and nothing will relaunch it but us. Hence the reconnect loop below; it is
+// not optional polish.
 //
-// A relay that finds the app closed does not exit. It reports `waiting` and
-// holds the port until the app's socket appears, which is how opening the app
-// attaches without anything on this side having to notice.
+// The relay reports whether the app is attached with `peers` messages. Commands
+// are served as soon as the relay accepts, with or without the app.
 
 import {
   loadState,
@@ -50,9 +50,10 @@ let port = null;
 let attempt = 0;
 let lastReason = null;
 let detachProgress = null;
+// The relay accepted this side's hello: commands are served from here on.
 let accepted = false;
-// The relay is up but the menu bar app is not; the port stays open for it.
-let waiting = false;
+// The menu bar app is attached to the relay. Only the popup's status reads it.
+let appAttached = false;
 let handshakeTimer = null;
 
 /** Idempotent: safe to call on every service worker start. */
@@ -74,7 +75,7 @@ function openPort() {
 
   port = opened;
   accepted = false;
-  waiting = false;
+  appAttached = false;
   const connectionId = crypto.randomUUID();
   // Note: the backoff counter is NOT reset here. connectNative() hands back a
   // Port synchronously even when no host exists — the failure only surfaces
@@ -110,7 +111,7 @@ function openPort() {
     if (port !== opened || accepted) return;
     failConnection(
       opened,
-      'The menu bar app did not complete the handshake. Rebuild and reopen the matching app.'
+      'The bridge did not complete the handshake. Rebuild and reopen the matching app.'
     );
   }, 10_000);
   handshakeTimer.unref?.();
@@ -120,7 +121,7 @@ function teardown() {
   clearTimeout(handshakeTimer);
   handshakeTimer = null;
   accepted = false;
-  waiting = false;
+  appAttached = false;
   port = null;
   if (detachProgress) {
     detachProgress();
@@ -138,9 +139,8 @@ function failConnection(target, reason) {
   } catch {
     /* already disconnected */
   }
-  // A connection the app had accepted usually ends because the app quit. The
-  // replacement relay waits for it, so reopening the app attaches immediately
-  // rather than after the alarm.
+  // A connection the relay had accepted ended without Chrome refusing it, so a
+  // replacement relay is one spawn away.
   if (wasLive) openPort();
   else scheduleReconnect(reason);
 }
@@ -160,8 +160,8 @@ function scheduleReconnect(reason) {
 /** What the popup shows, and why it is not connected. */
 export function bridgeStatus() {
   return {
-    connected: accepted,
-    connecting: Boolean(port) && !accepted && !waiting,
+    connected: accepted && appAttached,
+    connecting: Boolean(port) && !accepted,
     reason: lastReason,
   };
 }
@@ -207,16 +207,6 @@ export async function pushState() {
 }
 
 async function handleMessage(message, target, connectionId) {
-  if (message?.type === 'waiting') {
-    // Sent by the relay itself. No handshake can finish until the app opens,
-    // so the deadline would only tear down the one port that can reach it.
-    clearTimeout(handshakeTimer);
-    handshakeTimer = null;
-    waiting = true;
-    attempt = 0;
-    lastReason = 'Pull Deck.app is not open.';
-    return;
-  }
   if (message?.type === 'hello') {
     clearTimeout(handshakeTimer);
     handshakeTimer = null;
@@ -229,13 +219,17 @@ async function handleMessage(message, target, connectionId) {
       return;
     }
     accepted = true;
-    waiting = false;
     attempt = 0;
-    lastReason = null;
     await pushState();
     return;
   }
   if (!accepted) return;
+  if (message?.type === 'peers') {
+    // Sent by the relay itself whenever the app attaches, detaches, or refuses.
+    appAttached = message.app === true;
+    lastReason = appAttached ? null : (message.reason ?? 'Pull Deck.app is not open.');
+    return;
+  }
   attempt = 0; // proof of life: something is actually on the other end
   const id = message?.id ?? null;
   try {

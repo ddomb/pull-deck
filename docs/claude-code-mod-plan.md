@@ -45,7 +45,7 @@ extension ──stdio──▶ relay (hub) ──────┤
   - `POST /open {prId}` sends `openOne` and returns its reply (`ok`, `focused`, `failures`). Return 409 if an open is already in flight, 503 if the extension isn't connected yet.
   - `GET /ping`.
   - Allowlist: viewers may send only `getState`, `openOne`, and `openAll`, never `settings`.
-- **Done when:** `macos/tools/relay-roundtrip.mjs` (plus a new `relay-viewer.mjs`) drives a fake extension on stdio and a fake app plus viewers on sockets. It covers interleaved ids, progress routing, app quit mid-command, a second relay seeing the socket already owned, a stale socket, an oversized body, and the allowlist. `npm run mac:test` passes.
+- **Done when:** `macos/tools/relay-hub.mjs` (replacing `relay-roundtrip.mjs` and `relay-waits.mjs`) drives a fake extension on stdio and a fake app plus viewers on sockets. It covers interleaved ids, progress routing, app quit mid-command, a second relay seeing the socket already owned, a stale socket, an oversized body, and the allowlist. `npm run mac:test` passes.
 
 ### 4. Mod scaffold + types (~30 min)
 - `~/.claude/dev-mods/<session>/pull-deck/` contains `.claude-plugin/plugin.json`, `hooks/hooks.json`, `hooks/register.tsx`, and `types/index.d.ts`.

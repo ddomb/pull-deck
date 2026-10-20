@@ -2,6 +2,6 @@
 public enum BuildIdentity {
     public static let extensionID = "jdpikjmmmljjpkmfmhgildnaihbpmfpj"
     public static let version = "1.4.0"
-    public static let protocolVersion = 2
+    public static let protocolVersion = 3
     public static let hostName = "com.pulldeck.bridge"
 }

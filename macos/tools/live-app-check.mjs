@@ -9,8 +9,8 @@
 //   node macos/tools/live-app-check.mjs
 
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const relay = resolve(
@@ -61,9 +61,23 @@ const frame = (obj) => {
   return Buffer.concat([header, body]);
 };
 
-const child = spawn(relay, ['chrome-extension://livecheckextensionidaaaaaaaaaaaa/'], {
+const identity = readFileSync(
+  resolve(import.meta.dirname, '..', 'Sources/PullDeckKit/BuildIdentity.swift'),
+  'utf8'
+);
+const extensionId = identity.match(/extensionID = "([^"]+)"/)[1];
+const version = Number(identity.match(/protocolVersion = (\d+)/)[1]);
+
+// The relay answers the extension's hello itself and only then dials the app.
+// Its viewer socket goes to a scratch path so it never meets the live relay's.
+const child = spawn(relay, [`chrome-extension://${extensionId}/`], {
   stdio: ['pipe', 'pipe', 'pipe'],
+  env: {
+    ...process.env,
+    PULLDECK_VIEWER_SOCKET: join(mkdtempSync(join(tmpdir(), 'pulldeck-')), 'viewer.sock'),
+  },
 });
+child.stdin.write(frame({ type: 'hello', version, extensionId }));
 
 let buffer = Buffer.alloc(0);
 const fromApp = [];
@@ -94,7 +108,6 @@ setTimeout(() => {
   check('and its command carries an id', typeof getState?.id === 'number');
 
   // Push a realistic state, as the extension would.
-  child.stdin.write(frame({ type: 'hello', version: 1, extensionId: 'livecheck' }));
   child.stdin.write(
     frame({
       type: 'state',

@@ -665,7 +665,7 @@ function renderBridge(status) {
   const reason = status?.reason ?? '';
   if (status?.connecting) {
     dom.bridgeStatus.textContent = 'Connecting…';
-    dom.bridgeHelp.textContent = 'Waiting for the menu bar app to accept this browser profile.';
+    dom.bridgeHelp.textContent = 'Waiting for the bridge to accept this browser profile.';
     return;
   }
   dom.bridgeIcon.replaceChildren(glyph(connected ? icons.inGroup : icons.alert));

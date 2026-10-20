@@ -34,11 +34,9 @@ try {
 }
 execFileSync(
   process.execPath,
-  [resolve(cwd, 'tools/relay-roundtrip.mjs'), resolve(bin, 'pulldeck-bridge')],
-  { cwd: root, stdio: 'inherit' }
-);
-execFileSync(
-  process.execPath,
-  [resolve(cwd, 'tools/relay-waits.mjs'), resolve(bin, 'pulldeck-bridge')],
-  { cwd: root, stdio: 'inherit' }
+  [resolve(cwd, 'tools/relay-hub.mjs'), resolve(bin, 'pulldeck-bridge')],
+  {
+    cwd: root,
+    stdio: 'inherit',
+  }
 );

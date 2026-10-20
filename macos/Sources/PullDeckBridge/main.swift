@@ -7,16 +7,14 @@ signal(SIGPIPE, SIG_IGN)
 // The relay Chrome spawns.
 //
 // Chrome launches this process itself, one per connectNative() port, and it
-// dies with that port. It holds no state: it forwards Chrome's length-prefixed
-// stdio on one side to the menu bar app's Unix socket on the other.
+// dies with that port. It answers the extension's handshake itself, then
+// routes between Chrome's length-prefixed stdio and two Unix sockets: the menu
+// bar app's (dialled, whenever it is open) and viewer.sock (served, for local
+// viewers such as the Claude Code mod). Hub.swift holds the routing.
 //
 // Everything it prints for humans goes to stderr. The docs are explicit that
 // stdout is the wire and nothing else may appear there:
 // "Make sure that all output in stdout adheres to the native messaging protocol."
-
-func log(_ message: String) {
-    FileHandle.standardError.write(Data("pulldeck-bridge: \(message)\n".utf8))
-}
 
 // argv[1] is "the origin of the caller, usually chrome-extension://[ID]".
 let callerOrigin = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "(none)"
@@ -88,7 +86,11 @@ if callerOrigin != "(none)",
 }
 log("launched by \(callerOrigin)")
 
-let socketPath = ProcessInfo.processInfo.environment["PULLDECK_SOCKET"] ?? UnixSocket.defaultPath
+let environment = ProcessInfo.processInfo.environment
+let socketPath = environment["PULLDECK_SOCKET"] ?? UnixSocket.defaultPath
+let viewerPath =
+    environment["PULLDECK_VIEWER_SOCKET"]
+    ?? UnixSocket.directory.appendingPathComponent("viewer.sock").path
 
 let stdinFD = FileHandle.standardInput.fileDescriptor
 let stdoutFD = FileHandle.standardOutput.fileDescriptor
@@ -103,55 +105,24 @@ func writeToChrome(_ payload: Data) {
         defer { stdoutLock.unlock() }
         if !UnixSocket.writeAll(fd: stdoutFD, framed) { exit(0) }
     } catch {
-        // A message the app produced that Chrome would reject. Dropping one
-        // message beats corrupting the stream for every message after it.
+        // A message Chrome would reject. Dropping one message beats corrupting
+        // the stream for every message after it.
         log("dropping outbound message: \(error)")
     }
 }
 
-/// The app cannot reach into Chrome, so when it is not running the relay parks
-/// here and attaches the moment its socket appears. Exiting instead would leave
-/// the extension's retry alarm as the only way back, and that is 30 seconds at
-/// best. stdin is watched but not read: the extension's hello stays queued in
-/// the pipe for the app.
-func waitForApp() -> Int32 {
-    if let fd = try? UnixSocket.connect(to: socketPath) { return fd }
-    log("menu bar app not reachable at \(socketPath) — waiting for it")
-    writeToChrome(Data(#"{"type":"waiting"}"#.utf8))
-    // The queued hello keeps the pipe readable, so poll returns at once and
-    // the sleep is what paces the loop.
-    var chrome = pollfd(fd: stdinFD, events: Int16(POLLIN), revents: 0)
-    while true {
-        if poll(&chrome, 1, 0) > 0, chrome.revents & Int16(POLLHUP | POLLERR | POLLNVAL) != 0 {
-            log("chrome closed stdin while waiting")
-            exit(0)
-        }
-        usleep(250_000)
-        if let fd = try? UnixSocket.connect(to: socketPath) { return fd }
-    }
-}
+let hub = Hub(
+    Hub.Config(appSocket: socketPath, viewerSocket: viewerPath, writeToChrome: writeToChrome))
+atexit { hub.cleanUp() }
 
-let socketFD = waitForApp()
-log("attached to \(socketPath)")
-
-// App → Chrome. Newline-delimited JSON in, framed JSON out.
-let appToChrome = Thread {
-    UnixSocket.pumpLines(fd: socketFD) { line in
-        writeToChrome(line)
-    }
-    log("app closed the socket")
-    exit(0)
-}
-appToChrome.stackSize = 512 * 1024
-appToChrome.start()
-
-// Chrome → app. Framed JSON in, newline-delimited JSON out.
-// Runs on the main thread so that stdin EOF ends the process naturally.
+// Chrome → hub. Framed JSON in. Runs on the main thread so that stdin EOF ends
+// the process naturally.
 var buffer = Data()
 var chunk = [UInt8](repeating: 0, count: 64 * 1024)
 
 while true {
     let n = read(stdinFD, &chunk, chunk.count)
+    if n < 0 && errno == EINTR { continue }
     if n <= 0 {
         // Chrome closed the pipe: the port is gone, so we are done. The exit
         // mechanism is not spelled out in Chrome's docs, but a closed stdin is
@@ -162,12 +133,7 @@ while true {
     buffer.append(contentsOf: chunk[0..<n])
 
     do {
-        for message in try NativeMessaging.drain(buffer: &buffer) {
-            if !UnixSocket.writeLine(fd: socketFD, message) {
-                log("app socket went away mid-write")
-                exit(0)
-            }
-        }
+        for message in try NativeMessaging.drain(buffer: &buffer) { hub.fromExtension(message) }
     } catch {
         // A desynchronised stream cannot be recovered — every subsequent length
         // prefix would be read from the wrong offset.
@@ -176,5 +142,4 @@ while true {
     }
 }
 
-close(socketFD)
 exit(0)
