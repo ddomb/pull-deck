@@ -12,6 +12,8 @@ export type PullRequest = {
   deletions: number
   reviewDecision: string | null
   checks: string | null
+  /** The extension's canonical identity, matched against the tab group's keys. */
+  key: string | null
 }
 
 /** What the relay's viewer socket last said, reduced to what the pane draws. */
@@ -26,6 +28,10 @@ export type Snapshot =
       isStale: boolean
       fetchedAt: number | null
       warning: string | null
+      login: string | null
+      groupTitle: string
+      groupKeys: string[]
+      isGroupElsewhere: boolean
     }
 
 declare module 'claude-code' {

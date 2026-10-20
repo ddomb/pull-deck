@@ -25,6 +25,7 @@ const pr = (id: string, extra: Record<string, unknown> = {}) => ({
   deletions: 2,
   reviewDecision: null,
   checks: null,
+  key: `github.com/acme/api#${id}`,
   ...extra,
 })
 
@@ -39,6 +40,9 @@ const listState = {
   stale: false,
   fetchedAt: 0,
   error: null,
+  viewer: { login: 'octo' },
+  settings: { groupTitle: 'Pull Requests' },
+  group: { keys: ['github.com/acme/api#PR_1'], otherWindow: false },
 }
 
 type Bridge = { state: unknown; status?: number; down?: boolean; open?: unknown }
@@ -133,5 +137,17 @@ test('no token points at the popup', async ($, on) => {
   engine(on, { state: { stage: 'onboarding' } })
   await openPane($)
   const ui = await $.ui.mount({ plugin: 'pull-deck', surface: 'terminal', ...PANE })
-  expect(await ui.find({ type: 'Text', text: /GitHub token/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /personal access token/ })).toBeDefined()
+})
+
+test('grouped rows are marked, and the dock opens the rest like the menu app', async ($, on) => {
+  engine(on, { state: { ...listState, truncated: {} } })
+  await openPane($)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'pull-deck', surface, ...PANE })
+    expect(await ui.find({ type: 'Text', text: '@octo' })).toBeDefined()
+    expect((await ui.find({ key: 'open-all' }))?.text).toBe('Open 1 in “Pull Requests”')
+    expect(await ui.find({ type: 'Text', text: '1 already there, so it stays put.' })).toBeDefined()
+    await ui.unmount()
+  }
 })

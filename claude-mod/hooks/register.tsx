@@ -2,13 +2,25 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Scope } from '../types'
-import { SCOPES, age, chips, openFailure, shownScope, toSnapshot } from './model'
+import { SCOPES, age, chips, dockLabel, footnote, openFailure, shownScope, toSnapshot } from './model'
 
 const PANE = 'pull-deck'
 const TITLE = 'Pull Deck'
 const BASE = 'http://pull-deck'
 const LIVE_MS = 5_000
 const IDLE_MS = 60_000
+
+// The menu bar app's accent, oklch(50% .118 190).
+const ACCENT = '#007772'
+const ACCENT_TINT = 'rgba(0, 119, 114, 0.10)'
+const CHIP_TINT: Record<string, string> = {
+  success: 'rgba(52, 199, 89, 0.14)',
+  error: 'rgba(255, 69, 58, 0.14)',
+  warning: 'rgba(255, 159, 10, 0.14)',
+  subtle: 'rgba(142, 142, 147, 0.16)',
+}
+const STACK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="3" y="1.5" width="10" height="2" rx="1" fill="${ACCENT}" opacity=".55"/><rect x="1.5" y="4.5" width="13" height="10" rx="2.2" fill="${ACCENT}"/></svg>`
+const CHECK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="${ACCENT}"/><path d="M4.8 8.2l2.2 2.2 4.2-4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 
 const snapshot = atom({ plugin: 'pull-deck', key: 'snapshot' } as const, null)
 const picked = atom({ plugin: 'pull-deck', key: 'scope' } as const, null)
@@ -67,19 +79,66 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button } = $.ui.resolve(e)
+    const elements = $.ui.resolve(e)
+    const { Box, Text, Button } = elements
+    // The terminal has no Svg: it gets a glyph in the icon's place.
+    const icon = (source: string, alt: string, size: number, fallback: string) =>
+      'Svg' in elements ? (
+        <elements.Svg source={source} alt={alt} width={size} height={size} />
+      ) : (
+        <Text color={ACCENT}>{fallback}</Text>
+      )
     const now = Date.now()
     const current = await read($, snapshot)
     const scope = shownScope(current, await read($, picked))
     const busy = await read($, opening)
 
-    if (!current) return <Text dimColor>Loading…</Text>
-    if (current.kind === 'down') return <Text color="warning">{current.reason}</Text>
+    const refresh = async () => {
+      const { status, text } = await call($, '/state')
+      lastPoll = Date.now()
+      await update($, snapshot, () => toSnapshot(status, text))
+    }
+    const header = (
+      <Box flexDirection="row" alignItems="center" gap={1}>
+        {icon(STACK_ICON, 'Pull Deck', 18, '▤')}
+        <Box flexDirection="column" flexGrow={1}>
+          <Text weight="semibold">Pull Deck</Text>
+          {current?.kind === 'list' && current.login && (
+            <Text size="caption" dimColor>
+              @{current.login}
+            </Text>
+          )}
+        </Box>
+        <Button key="refresh" plain label="↻" hotkey="g" onPress={refresh} />
+      </Box>
+    )
+    const notice = (title: string, body: string, color?: 'warning' | 'error') => (
+      <Box flexDirection="column" gap={1}>
+        {header}
+        <Box flexDirection="column" padding={1} borderStyle="round" borderColor="subtle">
+          <Text weight="semibold" color={color}>
+            {title}
+          </Text>
+          <Text dimColor>{body}</Text>
+        </Box>
+      </Box>
+    )
+
+    if (!current) return notice('Loading…', 'Asking the Pull Deck bridge for your pull requests.')
+    if (current.kind === 'down') return notice('Not connected yet', current.reason, 'warning')
     if (current.kind === 'onboarding')
-      return <Text>Connect a GitHub token in the Pull Deck extension popup.</Text>
-    if (current.kind === 'error') return <Text color="error">{current.message}</Text>
+      return notice(
+        'Connect GitHub',
+        'Open the Pull Deck extension in Chrome and paste a personal access token. The token stays there.',
+      )
+    if (current.kind === 'error') return notice('GitHub said no', current.message, 'error')
 
     const rows = current.scopes[scope]
+    const grouped = new Set(current.groupKeys)
+    const isGrouped = (key: string | null) => key !== null && grouped.has(key)
+    const pending = rows.filter(pr => !isGrouped(pr.key)).length
+    const note = footnote(rows.length, pending, current.truncated.includes(scope), current.isGroupElsewhere)
+
     // One open at a time, as in the menu bar app; a press while one runs is dropped.
     const open = async (prId: string) => {
       if (busy) return
@@ -88,65 +147,103 @@ export const register: Register = on => {
       await update($, opening, () => null)
       const failure = openFailure(status, text)
       if (failure) $.ui.toast(failure)
+      await refresh()
     }
     const openAll = async () => {
-      if (busy || rows.length === 0) return
+      if (busy || pending === 0) return
       await update($, opening, () => '*')
       const { status, text } = await call($, '/open-all', { scope })
       await update($, opening, () => null)
       const failure = openFailure(status, text)
       if (failure) $.ui.toast(failure)
+      await refresh()
     }
     const choose = (next: Scope) => update($, picked, () => next)
 
     return (
       <Box flexDirection="column" gap={1}>
-        <Box flexDirection="row" gap={1}>
-          {SCOPES.map(({ scope: s, label, hotkey }) => (
-            <Button
-              key={`scope-${s}`}
-              label={`${label} ${current.scopes[s].length}`}
-              hotkey={hotkey}
-              variant={s === scope ? 'primary' : 'secondary'}
-              onPress={() => choose(s)}
-            />
-          ))}
+        {header}
+        <Box flexDirection="row" borderStyle="round" borderColor="subtle">
+          {SCOPES.map(({ scope: s, label, hotkey }) => {
+            const count = current.scopes[s].length
+            return (
+              <Box
+                key={`tab-${s}`}
+                flexGrow={1}
+                justifyContent="center"
+                backgroundColor={s === scope ? 'rgba(127, 127, 127, 0.28)' : undefined}
+              >
+                <Button
+                  key={`scope-${s}`}
+                  plain
+                  label={count > 0 ? `${label}  ${count}` : label}
+                  hotkey={hotkey}
+                  onPress={() => choose(s)}
+                />
+              </Box>
+            )
+          })}
+        </Box>
+        <Box flexDirection="column" borderStyle="round" borderColor="subtle">
+          {rows.length === 0 && (
+            <Box padding={1}>
+              <Text dimColor>No open pull requests here.</Text>
+            </Box>
+          )}
+          {rows.map(pr => {
+            const inGroup = isGrouped(pr.key)
+            const badges = chips(pr)
+            return (
+              <Box
+                key={`row-${pr.id}`}
+                flexDirection="row"
+                gap={1}
+                paddingX={1}
+                paddingY={1}
+                backgroundColor={inGroup ? ACCENT_TINT : undefined}
+                hover={{ backgroundColor: 'rgba(127, 127, 127, 0.12)' }}
+              >
+                <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+                  <Button key={`pr-${pr.id}`} plain dimColor={Boolean(busy) && busy !== pr.id} onPress={() => open(pr.id)}>
+                    <Text weight="semibold">{busy === pr.id ? `Opening… ${pr.title}` : pr.title}</Text>
+                  </Button>
+                  <Text size="caption" dimColor>
+                    {pr.repo} #{pr.number} {age(pr.updatedAt, now)}{' '}
+                    <Text color="success">+{pr.additions.toLocaleString('en-US')}</Text>{' '}
+                    <Text color="error">−{pr.deletions.toLocaleString('en-US')}</Text>
+                  </Text>
+                  {badges.length > 0 && (
+                    <Box flexDirection="row" gap={1} marginTop={1}>
+                      {badges.map(chip => (
+                        <Text size="caption" weight="medium" color={chip.color} backgroundColor={CHIP_TINT[chip.color]}>
+                          {` ${chip.glyph} ${chip.text} `}
+                        </Text>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+                {inGroup && icon(CHECK_ICON, `Already in ${current.groupTitle}`, 16, '✓')}
+              </Box>
+            )
+          })}
+        </Box>
+        <Box flexDirection="column" alignItems="center" gap={1}>
           <Button
             key="open-all"
-            label={busy === '*' ? 'Opening…' : 'Open all'}
+            variant="primary"
+            label={busy === '*' ? 'Opening…' : dockLabel(rows.length, pending, current.groupTitle)}
             hotkey="o"
-            dimColor={rows.length === 0 || Boolean(busy)}
+            dimColor={pending === 0 || Boolean(busy)}
             onPress={openAll}
           />
+          {(note || current.isStale || current.warning) && (
+            <Text size="caption" dimColor>
+              {[note, current.isStale ? 'The list may be out of date.' : '', current.warning ?? '']
+                .filter(Boolean)
+                .join(' ')}
+            </Text>
+          )}
         </Box>
-        <Box flexDirection="column">
-          {rows.length === 0 && <Text dimColor>No open pull requests here.</Text>}
-          {rows.map(pr => (
-            <Button key={`pr-${pr.id}`} plain dimColor={Boolean(busy) && busy !== pr.id} onPress={() => open(pr.id)}>
-              {busy === pr.id ? 'Opening… ' : ''}
-              {pr.title}
-              <Text dimColor>
-                {'  '}
-                {pr.repo} #{pr.number} · {age(pr.updatedAt, now)} ·{' '}
-              </Text>
-              <Text color="diffAdded">+{pr.additions}</Text>
-              <Text dimColor> </Text>
-              <Text color="diffRemoved">−{pr.deletions}</Text>
-              {chips(pr).map(chip => (
-                <Text color={chip.color}>
-                  {'  '}
-                  {chip.text}
-                </Text>
-              ))}
-            </Button>
-          ))}
-        </Box>
-        <Text dimColor>
-          {current.fetchedAt ? `Updated ${age(new Date(current.fetchedAt).toISOString(), now)} ago` : ''}
-          {current.truncated.includes(scope) ? ' · showing the 50 most recently updated' : ''}
-          {current.isStale ? ' · list may be out of date' : ''}
-          {current.warning ? ` · ${current.warning}` : ''}
-        </Text>
       </Box>
     )
   })

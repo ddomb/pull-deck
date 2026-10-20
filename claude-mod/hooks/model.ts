@@ -51,6 +51,16 @@ export function toSnapshot(status: number, text: string): Snapshot {
     isStale: state.stale === true,
     fetchedAt: typeof state.fetchedAt === 'number' ? state.fetchedAt : null,
     warning: messageOf(state.error),
+    login: isObject(state.viewer) && typeof state.viewer.login === 'string' ? state.viewer.login : null,
+    groupTitle:
+      isObject(state.settings) && typeof state.settings.groupTitle === 'string'
+        ? state.settings.groupTitle
+        : 'Pull Requests',
+    groupKeys:
+      isObject(state.group) && Array.isArray(state.group.keys)
+        ? state.group.keys.filter((key): key is string => typeof key === 'string')
+        : [],
+    isGroupElsewhere: isObject(state.group) && state.group.otherWindow === true,
   }
 }
 
@@ -69,6 +79,7 @@ function toPullRequest(pr: Json): PullRequest[] {
       deletions: typeof pr.deletions === 'number' ? pr.deletions : 0,
       reviewDecision: typeof pr.reviewDecision === 'string' ? pr.reviewDecision : null,
       checks: typeof pr.checks === 'string' ? pr.checks : null,
+      key: typeof pr.key === 'string' ? pr.key : null,
     },
   ]
 }
@@ -80,20 +91,35 @@ export function shownScope(snapshot: Snapshot | null, picked: Scope | null): Sco
   return SCOPES.find(({ scope }) => snapshot.scopes[scope].length > 0)?.scope ?? 'mine'
 }
 
-export type Chip = { text: string; color: 'success' | 'error' | 'warning' | 'subtle' }
+export type Chip = { text: string; glyph: string; color: 'success' | 'error' | 'warning' | 'subtle' }
 
 /** The menu bar app's badges (MenuContent.swift badgeItems), as words. */
 export function chips(pr: PullRequest): Chip[] {
   const out: Chip[] = []
-  if (pr.isDraft) out.push({ text: 'Draft', color: 'subtle' })
-  if (pr.reviewDecision === 'APPROVED') out.push({ text: 'Approved', color: 'success' })
-  else if (pr.reviewDecision === 'CHANGES_REQUESTED') out.push({ text: 'Changes', color: 'error' })
+  if (pr.isDraft) out.push({ text: 'Draft', glyph: '◌', color: 'subtle' })
+  if (pr.reviewDecision === 'APPROVED') out.push({ text: 'Approved', glyph: '✓', color: 'success' })
+  else if (pr.reviewDecision === 'CHANGES_REQUESTED') out.push({ text: 'Changes', glyph: '⊖', color: 'error' })
   else if (pr.reviewDecision === 'REVIEW_REQUIRED' && !pr.isDraft)
-    out.push({ text: 'In review', color: 'subtle' })
-  if (pr.checks === 'FAILURE' || pr.checks === 'ERROR') out.push({ text: 'Checks failed', color: 'error' })
+    out.push({ text: 'In review', glyph: '◷', color: 'subtle' })
+  if (pr.checks === 'FAILURE' || pr.checks === 'ERROR') out.push({ text: 'Checks failed', glyph: '✕', color: 'error' })
   else if (pr.checks === 'PENDING' || pr.checks === 'EXPECTED')
-    out.push({ text: 'Checks running', color: 'warning' })
+    out.push({ text: 'Checks running', glyph: '◌', color: 'warning' })
   return out
+}
+
+/** The menu bar app's dock footnote (MenuContent.swift footnote). */
+export function footnote(total: number, pending: number, isTruncated: boolean, isElsewhere: boolean): string {
+  if (isTruncated) return 'Showing the 50 most recently updated pull requests.'
+  if (isElsewhere) return 'The group lives in another window.'
+  const already = total - pending
+  if (already > 0 && pending > 0) return `${already} already there, so ${already === 1 ? 'it stays' : 'they stay'} put.`
+  return ''
+}
+
+/** The dock button's words (MenuContent.swift dock). */
+export function dockLabel(total: number, pending: number, groupTitle: string): string {
+  if (pending === 0) return total === 0 ? 'Nothing to open' : `All ${total} in “${groupTitle}”`
+  return `Open ${pending} in “${groupTitle}”`
 }
 
 export function age(iso: string, now: number): string {
