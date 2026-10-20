@@ -109,7 +109,7 @@ export const register: Register = on => {
             </Text>
           )}
         </Box>
-        <Button key="refresh" plain label="↻" onPress={refresh} />
+        <Button key="refresh" plain label="↻" hotkey="g" onPress={refresh} />
       </Box>
     )
     const notice = (title: string, body: string, color?: 'warning' | 'error') => (
@@ -164,20 +164,20 @@ export const register: Register = on => {
       <Box flexDirection="column" gap={1}>
         {header}
         <Box flexDirection="row" borderStyle="round" borderColor="subtle">
-          {SCOPES.map(({ scope: s, label }) => {
+          {SCOPES.map(({ scope: s, label, hotkey }) => {
             const count = current.scopes[s].length
             return (
               <Box
                 key={`tab-${s}`}
                 flexGrow={1}
                 justifyContent="center"
-                alignItems="center"
                 backgroundColor={s === scope ? 'rgba(127, 127, 127, 0.28)' : undefined}
               >
                 <Button
                   key={`scope-${s}`}
                   plain
                   label={count > 0 ? `${label}  ${count}` : label}
+                  hotkey={hotkey}
                   onPress={() => choose(s)}
                 />
               </Box>
@@ -221,13 +221,15 @@ export const register: Register = on => {
                     <Text size="caption" color="error">{`−${pr.deletions.toLocaleString('en-US')}`}</Text>
                   </Button>
                   {badges.length > 0 && (
-                    <Button key={`chips-${pr.id}`} plain dimColor={dimmed} onPress={press}>
-                      {badges.map(chip => (
-                        <Text size="caption" weight="medium" color={chip.color} backgroundColor={CHIP_TINT[chip.color]}>
-                          {` ${chip.glyph} ${chip.text} `}
-                        </Text>
-                      ))}
-                    </Button>
+                    <Box flexDirection="row" marginTop={1}>
+                      <Button key={`chips-${pr.id}`} plain dimColor={dimmed} onPress={press}>
+                        {badges.map(chip => (
+                          <Text size="caption" weight="medium" color={chip.color} backgroundColor={CHIP_TINT[chip.color]}>
+                            {` ${chip.glyph} ${chip.text} `}
+                          </Text>
+                        ))}
+                      </Button>
+                    </Box>
                   )}
                 </Box>
                 {inGroup && icon(CHECK_ICON, `Already in ${current.groupTitle}`, 16, '✓')}
@@ -236,22 +238,14 @@ export const register: Register = on => {
           })}
         </Box>
         <Box flexDirection="column" alignItems="center" gap={1}>
-          <Box
-            key="dock"
-            width="100%"
-            justifyContent="center"
-            alignItems="center"
-            borderStyle="round"
-            borderColor={ACCENT}
-            backgroundColor={pending === 0 || busy ? 'rgba(0, 119, 114, 0.45)' : ACCENT}
-            hover={{ backgroundColor: '#008a84' }}
-          >
-            <Button key="open-all" plain onPress={openAll}>
-              <Text color="#ffffff" weight="medium">
-                {busy === '*' ? 'Opening…' : dockLabel(rows.length, pending, current.groupTitle)}
-              </Text>
-            </Button>
-          </Box>
+          <Button
+            key="open-all"
+            variant="primary"
+            label={busy === '*' ? 'Opening…' : dockLabel(rows.length, pending, current.groupTitle)}
+            hotkey="o"
+            dimColor={pending === 0 || Boolean(busy)}
+            onPress={openAll}
+          />
           {(note || current.isStale || current.warning) && (
             <Text size="caption" dimColor>
               {[note, current.isStale ? 'The list may be out of date.' : '', current.warning ?? '']

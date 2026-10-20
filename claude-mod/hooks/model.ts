@@ -1,9 +1,9 @@
 import type { PullRequest, Scope, Snapshot } from '../types'
 
-export const SCOPES: readonly { scope: Scope; label: string }[] = [
-  { scope: 'mine', label: 'Mine' },
-  { scope: 'reviewing', label: 'Reviews' },
-  { scope: 'assigned', label: 'Assigned' },
+export const SCOPES: readonly { scope: Scope; label: string; hotkey: string }[] = [
+  { scope: 'mine', label: 'Mine', hotkey: 'm' },
+  { scope: 'reviewing', label: 'Reviews', hotkey: 'r' },
+  { scope: 'assigned', label: 'Assigned', hotkey: 'a' },
 ]
 
 type Json = Record<string, unknown>
