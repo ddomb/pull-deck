@@ -85,7 +85,7 @@ The app installs its native host manifest into detected Chromium browsers contai
 
 One browser profile controls the companion at a time. Another profile receives an explicit “another browser profile” message. Close the controlling profile/browser, then retry from the intended profile. The extension itself continues working independently in every profile.
 
-Release 1.4 uses bridge protocol 2. Rebuild/reopen the companion when upgrading from an earlier extension; a mismatched app/extension pair cannot complete the handshake.
+Bridge protocol 3 is current. Rebuild/reopen the companion when upgrading from an earlier extension; a mismatched app/extension pair cannot complete the handshake.
 
 For scripted installation or diagnosis:
 
@@ -97,6 +97,26 @@ macos/install-host.sh
 To remove companion integration, quit the app and run `macos/install-host.sh --uninstall`. Remove the extension separately from the browser. You can add the locally built app to Login Items using macOS Settings.
 
 The local app is ad-hoc signed. Downloadable, notarized macOS binaries are not part of the current release process.
+
+## Claude Code mod
+
+`claude-mod/` is a Claude Code mod that shows the same three lists in a **Pull Deck** pane, in the terminal and in the desktop app's Code tab. Run `/pull-deck` to open it. Click a row to open that pull request the way the menu bar app does: the extension reuses a matching tab or creates and groups one, then focuses it. `m`, `r` and `a` switch scopes, and `o` opens the whole list.
+
+The mod talks to the extension through the bridge relay, so the menu bar app does not need to be running. Chrome must be open with the extension loaded, and the bridge must be installed once: open Pull Deck.app once, or run `macos/install-host.sh`.
+
+Install it at the prompt of a terminal session:
+
+```
+/plugin install pull-deck --marketplace ddomb/pull-deck
+```
+
+From a shell:
+
+```bash
+claude plugin install pull-deck --marketplace ddomb/pull-deck
+```
+
+In the desktop app, click + next to the prompt box, then **Plugins**, **Add marketplace** with `ddomb/pull-deck`, then **Add plugin**.
 
 ## Permissions
 

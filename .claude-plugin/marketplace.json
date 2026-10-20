@@ -1,0 +1,6 @@
+{
+  "name": "pull-deck",
+  "owner": { "name": "Ariel Domb" },
+  "description": "The Pull Deck Claude Code mod",
+  "plugins": [{ "name": "pull-deck", "source": "./claude-mod" }]
+}

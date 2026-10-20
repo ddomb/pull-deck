@@ -1,0 +1,7 @@
+{
+  "name": "pull-deck",
+  "version": "0.1.0",
+  "description": "Your open pull requests from the Pull Deck extension, in a pane; click one to open it in its tab group",
+  "author": { "name": "Ariel Domb" },
+  "types": "./types/index.d.ts"
+}

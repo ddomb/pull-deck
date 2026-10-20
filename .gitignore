@@ -13,3 +13,6 @@ macos/build/
 node_modules/
 dist/
 __pycache__/
+
+# Types the Claude Code engine lays for the mod
+claude-mod/.claude-plugin/types/
