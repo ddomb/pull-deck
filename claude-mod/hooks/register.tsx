@@ -213,22 +213,24 @@ export const register: Register = on => {
                   <Button key={`pr-${pr.id}`} plain dimColor={dimmed} onPress={press}>
                     <Text weight="semibold">{busy === pr.id ? `Opening… ${pr.title}` : pr.title}</Text>
                   </Button>
-                  <Button key={`meta-${pr.id}`} plain dimColor={dimmed} onPress={press}>
-                    <Text size="caption" dimColor>
-                      {`${pr.repo} #${pr.number} ${age(pr.updatedAt, now)} `}
-                    </Text>
-                    <Text size="caption" color="success">{`+${pr.additions.toLocaleString('en-US')} `}</Text>
+                  {/* Colour inside a Button is dropped on the desktop, so the coloured
+                      parts sit beside the buttons rather than in them. */}
+                  <Box flexDirection="row" gap={1} alignItems="center">
+                    <Button key={`meta-${pr.id}`} plain dimColor={dimmed} onPress={press}>
+                      <Text size="caption" dimColor>
+                        {`${pr.repo} #${pr.number} ${age(pr.updatedAt, now)}`}
+                      </Text>
+                    </Button>
+                    <Text size="caption" color="success">{`+${pr.additions.toLocaleString('en-US')}`}</Text>
                     <Text size="caption" color="error">{`−${pr.deletions.toLocaleString('en-US')}`}</Text>
-                  </Button>
+                  </Box>
                   {badges.length > 0 && (
-                    <Box flexDirection="row" marginTop={1}>
-                      <Button key={`chips-${pr.id}`} plain dimColor={dimmed} onPress={press}>
-                        {badges.map(chip => (
-                          <Text size="caption" weight="medium" color={chip.color} backgroundColor={CHIP_TINT[chip.color]}>
-                            {` ${chip.glyph} ${chip.text} `}
-                          </Text>
-                        ))}
-                      </Button>
+                    <Box flexDirection="row" gap={1} marginTop={1}>
+                      {badges.map(chip => (
+                        <Text size="caption" weight="medium" color={chip.color} backgroundColor={CHIP_TINT[chip.color]}>
+                          {` ${chip.glyph} ${chip.text} `}
+                        </Text>
+                      ))}
                     </Box>
                   )}
                 </Box>
