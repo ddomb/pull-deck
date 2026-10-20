@@ -43,8 +43,11 @@ export const register: Register = on => {
     const started = await next(e)
     await $.command.register({ name: 'pull-deck', description: 'Show your open pull requests from Pull Deck' })
     const poll = async () => {
-      const panes = await $.ui.panes()
-      const isShown = panes.some(pane => pane.id === PANE && pane.isShown)
+      // Where a surface cannot list panes, poll as if the pane were shown.
+      const isShown = await $.ui.panes().then(
+        panes => panes.some(pane => pane.id === PANE && pane.isShown),
+        () => true,
+      )
       if (!isShown && Date.now() - lastPoll < IDLE_MS) return
       lastPoll = Date.now()
       const { status, text } = await call($, '/state')

@@ -100,7 +100,7 @@ The local app is ad-hoc signed. Downloadable, notarized macOS binaries are not p
 
 ## Claude Code mod
 
-`claude-mod/` is a Claude Code mod that shows the same three lists in a **Pull Deck** pane, in the terminal and in the desktop app's Code tab. Run `/pull-deck` to open it. Click a row to open that pull request the way the menu bar app does: the extension reuses a matching tab or creates and groups one, then focuses it. `m`, `r` and `a` switch scopes, and `o` opens the whole list.
+`claude-mod/` is a Claude Code mod that shows the same three lists in a **Pull Deck** pane, in the terminal and in the desktop app's Code tab. Run `/pull-deck` to open it. Click a row to open that pull request the way the menu bar app does: the extension reuses a matching tab or creates and groups one, then focuses it. Once you click into the pane, `m`, `r` and `a` switch scopes and `o` opens the whole list.
 
 The mod talks to the extension through the bridge relay, so the menu bar app does not need to be running. Chrome must be open with the extension loaded, and the bridge must be installed once: open Pull Deck.app once, or run `macos/install-host.sh`.
 
