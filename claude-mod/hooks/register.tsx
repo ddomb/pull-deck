@@ -67,6 +67,8 @@ export const register: Register = on => {
     }
     $.clock.every(LIVE_MS, () => void poll())
     void poll()
+    // Open on every session start, so the pane is there without /pull-deck.
+    void $.ui.open({ id: PANE, title: TITLE })
     return started
   })
 
