@@ -20,6 +20,7 @@ import {
   openScope,
   openOneById,
   applySettings,
+  resolveShortcut,
   onProgress,
   serializeError,
 } from './app-state.js';
@@ -236,8 +237,8 @@ async function handleMessage(message, target, connectionId) {
     const data = await dispatch(message, target, connectionId);
     if (port !== target || !accepted) return;
     if (id !== null) post({ type: 'reply', id, ok: true, data });
-    // Any command can change what the list looks like.
-    await pushState();
+    // Any other command can change what the list looks like; search runs per keystroke.
+    if (message.type !== 'search') await pushState();
   } catch (error) {
     if (port === target && accepted && id !== null)
       post({ type: 'reply', id, ok: false, error: serializeError(error) });
@@ -261,6 +262,13 @@ function dispatch(message, target, connectionId) {
       return openOneById(message.prId, operation);
     case 'settings':
       return applySettings(message.patch ?? {});
+    // Matching stays in resolve.js; clients get ids and find the rows in their own state.
+    case 'search':
+      return resolveShortcut(String(message.query ?? '')).then((result) => ({
+        status: result.status,
+        prIds: result.matches.map((pr) => pr.id),
+        stale: Boolean(result.stale),
+      }));
     case 'ping':
       return Promise.resolve({ pong: true, version: PROTOCOL_VERSION });
     default:

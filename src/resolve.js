@@ -151,6 +151,13 @@ export function findMatches(query, pullRequests) {
   const all = Array.isArray(pullRequests) ? pullRequests : [];
   if (!q) return { status: 'empty', matches: [], all };
 
+  // "abv10637" is how a ticket gets typed in a hurry; try it as "abv-10637" first.
+  const dashed = q.replace(/^([a-z]+)(\d+)$/i, '$1-$2');
+  if (dashed !== q) {
+    const hit = findMatches(dashed, all);
+    if (hit.matches.length > 0) return hit;
+  }
+
   let best = Infinity;
   const scored = [];
   for (const pr of all) {

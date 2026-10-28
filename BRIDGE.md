@@ -12,13 +12,13 @@ The relay holds no account state. The GitHub token remains in the extension. The
 
 ## Identity and handshake
 
-`src/bridge-protocol.js` defines protocol version 3 and the host name. `manifest.json` supplies the public key and release version. `npm run generate` derives the extension ID and emits `BuildIdentity.swift` and the packaged shortcut rules. `npm run check` rejects stale generated files.
+`src/bridge-protocol.js` defines protocol version 4 and the host name. `manifest.json` supplies the public key and release version. `npm run generate` derives the extension ID and emits `BuildIdentity.swift` and the packaged shortcut rules. `npm run check` rejects stale generated files.
 
-The extension sends `{type:"hello", version:3, extensionId}`. The relay replies `{type:"hello", version:3, accepted:true, peer:"relay"}` only when both identity and protocol match its own build. The extension serves commands only after acceptance, and reports "connecting" until then.
+The extension sends `{type:"hello", version:4, extensionId}`. The relay replies `{type:"hello", version:4, accepted:true, peer:"relay"}` only when both identity and protocol match its own build. The extension serves commands only after acceptance, and reports "connecting" until then.
 
 The relay then reports the companion with `{type:"peers", app:boolean, reason?}`: once at acceptance, and whenever the companion attaches, detaches, or refuses. The popup shows the companion as connected only while `app` is true. A companion that is not running costs nothing: the relay retries its socket every 250 ms, and the extension keeps the same port.
 
-To attach, the relay sends the companion `{type:"hello", version:3, extensionId}` with the identity it accepted. The companion replies as before. A second relay (another browser profile) receives `accepted:false` with a reason, which the relay forwards as `peers`; it retries every 5 seconds.
+To attach, the relay sends the companion `{type:"hello", version:4, extensionId}` with the identity it accepted. The companion replies as before. A second relay (another browser profile) receives `accepted:false` with a reason, which the relay forwards as `peers`; it retries every 5 seconds.
 
 Only one browser profile is active. A connection object owns descriptor lifetime, bounded writes, and shutdown. Incoming callbacks, pending commands, progress, and state delivery are tied to that connection. Detach clears all pending/busy state before a replacement can attach.
 
@@ -36,7 +36,8 @@ Every command carries an integer `id`. Exactly one terminal `reply` corresponds 
 | `openAll` | `scope: mine/reviewing/assigned` | Open result, including partial failures |
 | `openOne` | `prId` | Open result with confirmed `focused` outcome |
 | `settings` | Allowlisted `patch` | Public settings and group state |
-| `ping` | — | `{pong:true, version:3}` |
+| `search` | `query` | `{status, prIds, stale}` from the shortcut matcher over all scopes; no state push follows |
+| `ping` | — | `{pong:true, version:4}` |
 
 Replies use `{type:"reply", id, ok:true, data}` or `{type:"reply", id, ok:false, error}`. The envelope is decoded independently of command data: a settings/ping payload is not mistaken for an open result. Unknown nonessential payload shapes are tolerated without dropping the reply ID/outcome.
 
@@ -50,12 +51,13 @@ The relay serves HTTP/1.1, one request per connection, on `~/Library/Application
 
 | Route | Body | Answer |
 | --- | --- | --- |
-| `GET /ping` | — | `{pong:true, version:3}` |
+| `GET /ping` | — | `{pong:true, version:4}` |
 | `GET /state` | — | `{app, state, error}`; asks the extension (`getState`) when the cached state is older than 5 seconds |
 | `POST /open` | `{prId}` | `{ok, data, error}` from `openOne` |
 | `POST /open-all` | `{scope}` | `{ok, data, error}` from `openAll` |
+| `POST /search` | `{query}` | `{ok, data, error}` from `search` |
 
-Viewers may send only `getState`, `openOne` and `openAll`; settings are not reachable. One viewer open runs at a time (409 otherwise), and an open that is not answered in 30 seconds returns 504.
+Viewers may send only `getState`, `openOne`, `openAll` and `search`; settings are not reachable. One viewer open runs at a time (409 otherwise), and an open that is not answered in 30 seconds returns 504.
 
 Only one relay serves viewers. Before binding, a relay connects to the path: if another relay answers, it leaves the socket alone and checks again every 5 seconds, so the next profile's relay takes over when the first one exits. A relay removes its socket at exit.
 

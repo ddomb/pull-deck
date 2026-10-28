@@ -4,6 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { BRIDGE_PROTOCOL_VERSION } from '../src/bridge-protocol.js';
 
 let instance = 0;
 /** Fresh module instance per test — bridge.js holds module-level port state. */
@@ -87,7 +88,7 @@ test('connects to the documented host name and introduces itself', async () => {
   assert.equal(h.calls.hostName, 'com.pulldeck.bridge');
   const hello = h.calls.posted.find((m) => m.type === 'hello');
   assert.ok(hello, 'sends a hello so the app can check protocol compatibility');
-  assert.equal(hello.version, 3);
+  assert.equal(hello.version, BRIDGE_PROTOCOL_VERSION);
   assert.equal(hello.extensionId, 'pulldecktestextensionid');
 });
 
@@ -226,7 +227,11 @@ test('a connection that proves itself resets the backoff', async () => {
   // Now a connection that actually carries traffic, then drops.
   bridge.reconnect();
   await settle();
-  await h.listeners.message.at(-1)({ type: 'hello', version: 3, accepted: true });
+  await h.listeners.message.at(-1)({
+    type: 'hello',
+    version: BRIDGE_PROTOCOL_VERSION,
+    accepted: true,
+  });
   await settle();
   await h.listeners.message.at(-1)({ id: 1, type: 'ping' });
   await settle();
@@ -254,7 +259,11 @@ test('a command gets a reply carrying its id', async () => {
   const bridge = await freshBridge();
   bridge.ensureBridge();
   await settle();
-  await h.listeners.message.at(-1)({ type: 'hello', version: 3, accepted: true });
+  await h.listeners.message.at(-1)({
+    type: 'hello',
+    version: BRIDGE_PROTOCOL_VERSION,
+    accepted: true,
+  });
   await settle();
   h.calls.posted.length = 0;
 
@@ -272,7 +281,11 @@ test('an unknown command replies with an error rather than dying', async () => {
   const bridge = await freshBridge();
   bridge.ensureBridge();
   await settle();
-  await h.listeners.message.at(-1)({ type: 'hello', version: 3, accepted: true });
+  await h.listeners.message.at(-1)({
+    type: 'hello',
+    version: BRIDGE_PROTOCOL_VERSION,
+    accepted: true,
+  });
   await settle();
   h.calls.posted.length = 0;
 
@@ -289,7 +302,11 @@ test('every command is followed by a fresh state push', async () => {
   const bridge = await freshBridge();
   bridge.ensureBridge();
   await settle();
-  await h.listeners.message.at(-1)({ type: 'hello', version: 3, accepted: true });
+  await h.listeners.message.at(-1)({
+    type: 'hello',
+    version: BRIDGE_PROTOCOL_VERSION,
+    accepted: true,
+  });
   await settle();
   h.calls.posted.length = 0;
 
@@ -307,7 +324,11 @@ test('a command with no id is fire-and-forget, not a crash', async () => {
   const bridge = await freshBridge();
   bridge.ensureBridge();
   await settle();
-  await h.listeners.message.at(-1)({ type: 'hello', version: 3, accepted: true });
+  await h.listeners.message.at(-1)({
+    type: 'hello',
+    version: BRIDGE_PROTOCOL_VERSION,
+    accepted: true,
+  });
   await settle();
   h.calls.posted.length = 0;
 
@@ -338,7 +359,11 @@ test('openAll names a scope, so no client ever builds a GitHub URL', async () =>
   const bridge = await freshBridge();
   bridge.ensureBridge();
   await settle();
-  await h.listeners.message.at(-1)({ type: 'hello', version: 3, accepted: true });
+  await h.listeners.message.at(-1)({
+    type: 'hello',
+    version: BRIDGE_PROTOCOL_VERSION,
+    accepted: true,
+  });
   await settle();
   h.calls.posted.length = 0;
 
@@ -355,7 +380,11 @@ test('an unknown scope fails loudly instead of opening nothing', async () => {
   const bridge = await freshBridge();
   bridge.ensureBridge();
   await settle();
-  await h.listeners.message.at(-1)({ type: 'hello', version: 3, accepted: true });
+  await h.listeners.message.at(-1)({
+    type: 'hello',
+    version: BRIDGE_PROTOCOL_VERSION,
+    accepted: true,
+  });
   await settle();
   h.calls.posted.length = 0;
 
@@ -371,7 +400,11 @@ test('a send failure schedules recovery even when disconnect arrives afterward',
   const h = fakeChrome();
   const bridge = await freshBridge();
   bridge.ensureBridge();
-  await h.listeners.message.at(-1)({ type: 'hello', version: 3, accepted: true });
+  await h.listeners.message.at(-1)({
+    type: 'hello',
+    version: BRIDGE_PROTOCOL_VERSION,
+    accepted: true,
+  });
   await settle();
   h.calls.posted.push = () => {
     throw Error('Port disconnected');
@@ -386,7 +419,12 @@ test('the relay serves commands before the app attaches, and reports the app sep
   const h = fakeChrome();
   const bridge = await freshBridge();
   bridge.ensureBridge();
-  await h.listeners.message.at(-1)({ type: 'hello', version: 3, accepted: true, peer: 'relay' });
+  await h.listeners.message.at(-1)({
+    type: 'hello',
+    version: BRIDGE_PROTOCOL_VERSION,
+    accepted: true,
+    peer: 'relay',
+  });
   await h.listeners.message.at(-1)({ type: 'peers', app: false });
   await settle();
 
@@ -431,7 +469,7 @@ test('losing a live connection reconnects at once, not on an alarm', async () =>
   const h = fakeChrome();
   const bridge = await freshBridge();
   bridge.ensureBridge();
-  h.listeners.message.at(-1)({ type: 'hello', version: 3, accepted: true });
+  h.listeners.message.at(-1)({ type: 'hello', version: BRIDGE_PROTOCOL_VERSION, accepted: true });
   await settle();
 
   h.setLastError({ message: 'Native host has exited.' });
