@@ -1,4 +1,4 @@
-import type { PullRequest, Scope, Snapshot } from '../types'
+import type { Found, PullRequest, Scope, Snapshot } from '../types'
 
 export const SCOPES: readonly { scope: Scope; label: string; hotkey: string }[] = [
   { scope: 'mine', label: 'Mine', hotkey: 'm' },
@@ -146,4 +146,39 @@ export function openFailure(status: number, text: string): string | null {
   if (body.ok !== true) return messageOf(body.error) ?? 'The extension could not open it.'
   const failures = isObject(body.data) && Array.isArray(body.data.failures) ? body.data.failures : []
   return failures.length > 0 ? (messageOf(failures[0]) ?? 'A tab could not be opened.') : null
+}
+
+export const NOT_IN_SNAPSHOT = 'Not in your snapshot. Pull Deck holds Mine, Reviews and Assigned, up to 50 each.'
+
+/** The relay's `POST /search` answer, checked field by field: it is outside data. */
+export function toFound(query: string, status: number, text: string): Found {
+  if (status === 0) return { query, kind: 'failed', message: DOWN }
+  let body: unknown
+  try {
+    body = JSON.parse(text)
+  } catch {
+    return { query, kind: 'failed', message: `The bridge answered ${status}.` }
+  }
+  if (!isObject(body)) return { query, kind: 'failed', message: `The bridge answered ${status}.` }
+  if (status !== 200 || body.ok !== true || !isObject(body.data)) {
+    const error = typeof body.error === 'string' ? body.error : messageOf(body.error)
+    return { query, kind: 'failed', message: error ?? `The bridge answered ${status}.` }
+  }
+  const ids = Array.isArray(body.data.prIds) ? body.data.prIds : []
+  return {
+    query,
+    kind: 'hits',
+    prIds: ids.filter((id): id is string => typeof id === 'string'),
+    isStale: body.data.stale === true,
+  }
+}
+
+/** The matched ids as rows of the pane's own snapshot, once each, with every scope label it sits under. */
+export function hitRows(scopes: Record<Scope, PullRequest[]>, prIds: string[]): { pr: PullRequest; labels: string[] }[] {
+  return prIds.flatMap(id => {
+    const homes = SCOPES.filter(({ scope }) => scopes[scope].some(pr => pr.id === id))
+    if (homes.length === 0) return []
+    const pr = scopes[homes[0].scope].find(pr => pr.id === id)!
+    return [{ pr, labels: homes.map(home => home.label) }]
+  })
 }

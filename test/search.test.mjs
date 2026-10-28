@@ -52,3 +52,24 @@ test('the bridge search command returns the table, without pushing state', async
     'search-replies.json is stale: UPDATE_FIXTURES=1 npm test'
   );
 });
+
+test('the mod test mirror of the search fixtures is current', () => {
+  // claude plugin test reads no .json, so the mod test carries the fixtures as code.
+  const mirror = readFileSync(
+    new URL('../claude-mod/tests/search-fixtures.ts', import.meta.url),
+    'utf8'
+  );
+  const [, cases, replies] =
+    /^export const cases = ([\s\S]*?)\n\nexport const replies = ([\s\S]*)$/m.exec(mirror);
+  const read = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
+  assert.deepEqual(
+    JSON.parse(cases),
+    read('search-cases.json'),
+    'rerun the one-liner in search-fixtures.ts'
+  );
+  assert.deepEqual(
+    JSON.parse(replies),
+    read('search-replies.json'),
+    'rerun the one-liner in search-fixtures.ts'
+  );
+});

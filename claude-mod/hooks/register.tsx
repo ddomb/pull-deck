@@ -2,7 +2,19 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Scope } from '../types'
-import { SCOPES, age, chips, dockLabel, footnote, openFailure, shownScope, toSnapshot } from './model'
+import {
+  NOT_IN_SNAPSHOT,
+  SCOPES,
+  age,
+  chips,
+  dockLabel,
+  footnote,
+  hitRows,
+  openFailure,
+  shownScope,
+  toFound,
+  toSnapshot,
+} from './model'
 
 const PANE = 'pull-deck'
 const TITLE = 'Pull Deck'
@@ -25,6 +37,8 @@ const CHECK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
 const snapshot = atom({ plugin: 'pull-deck', key: 'snapshot' } as const, null)
 const picked = atom({ plugin: 'pull-deck', key: 'scope' } as const, null)
 const opening = atom({ plugin: 'pull-deck', key: 'opening' } as const, null)
+const query = atom({ plugin: 'pull-deck', key: 'query' } as const, '')
+const found = atom({ plugin: 'pull-deck', key: 'found' } as const, null)
 
 /** The relay serves viewers here; PULLDECK_VIEWER_SOCKET overrides it, as for the relay. */
 async function socketPath($: EngineInterface): Promise<string> {
@@ -82,7 +96,7 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
-    const { Box, Text, Button } = elements
+    const { Box, Text, Button, Input } = elements
     // The terminal has no Svg: it gets a glyph in the icon's place.
     const icon = (source: string, alt: string, size: number, fallback: string) =>
       'Svg' in elements ? (
@@ -94,6 +108,8 @@ export const register: Register = on => {
     const current = await read($, snapshot)
     const scope = shownScope(current, await read($, picked))
     const busy = await read($, opening)
+    const typed = await read($, query)
+    const result = await read($, found)
 
     const refresh = async () => {
       const { status, text } = await call($, '/state')
@@ -111,6 +127,8 @@ export const register: Register = on => {
             </Text>
           )}
         </Box>
+        {/* A hotkey is one digit or letter, so `/` cannot be one; `s` puts the ring in the search field. */}
+        <Button key="find" plain label="⌕" hotkey="s" onPress={() => void $.ui.focus({ requestId: PANE, key: 'search' })} />
         <Button key="refresh" plain label="↻" hotkey="g" onPress={refresh} />
       </Box>
     )
@@ -161,10 +179,84 @@ export const register: Register = on => {
       await refresh()
     }
     const choose = (next: Scope) => update($, picked, () => next)
+    const search = async (text: string) => {
+      const { status, text: reply } = await call($, '/search', { query: text })
+      return toFound(text, status, reply)
+    }
+    // Every keystroke asks without waiting, so the next keystroke is not held behind
+    // the socket; a reply lands only if its query is still the field's text.
+    const onType = async (text: string) => {
+      await update($, query, () => text)
+      if (!text.trim()) return
+      void search(text).then(async answer => {
+        if ((await read($, query)) === text) await update($, found, () => answer)
+      })
+    }
+    // Enter asks again rather than trusting a reply that may be for an older text.
+    const onEnter = async (text: string) => {
+      if (!text.trim()) return
+      await update($, query, () => text)
+      const answer = await search(text)
+      if ((await read($, query)) === text) await update($, found, () => answer)
+      const latest = await read($, snapshot)
+      if (answer.kind === 'failed') return $.ui.toast(answer.message)
+      const top = latest?.kind === 'list' ? hitRows(latest.scopes, answer.prIds)[0] : undefined
+      if (top) await open(top.pr.id)
+    }
+    const searching = typed.trim() !== '' && result?.query === typed ? result : null
+    const hits = searching?.kind === 'hits' ? hitRows(current.scopes, searching.prIds) : []
+
+    const row = (pr: (typeof rows)[number], labels?: string[]) => {
+      const inGroup = isGrouped(pr.key)
+      const badges = chips(pr)
+      const dimmed = Boolean(busy) && busy !== pr.id
+      const press = () => open(pr.id)
+      return (
+        <Box
+          key={`row-${pr.id}`}
+          flexDirection="row"
+          gap={1}
+          paddingX={1}
+          paddingY={1}
+          overflow="hidden"
+          backgroundColor={inGroup ? ACCENT_TINT : undefined}
+          hover={{ backgroundColor: 'rgba(127, 127, 127, 0.12)' }}
+        >
+          {/* The desktop draws a Button as one line and drops line breaks
+              in it, so each line of the row is its own Button, all opening
+              the same pull request: the row is clickable wherever it has text. */}
+          <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} gap={0}>
+            <Button key={`pr-${pr.id}`} plain dimColor={dimmed} onPress={press}>
+              <Text weight="semibold">{busy === pr.id ? `Opening… ${pr.title}` : pr.title}</Text>
+            </Button>
+            <Button key={`meta-${pr.id}`} plain dimColor={dimmed} onPress={press}>
+              <Text size="caption" dimColor>
+                {`${labels ? `${labels.join(' · ')} · ` : ''}${pr.repo} #${pr.number} ${age(pr.updatedAt, now)} `}
+              </Text>
+              <Text size="caption" color="success">{`+${pr.additions.toLocaleString('en-US')} `}</Text>
+              <Text size="caption" color="error">{`−${pr.deletions.toLocaleString('en-US')}`}</Text>
+            </Button>
+            {badges.length > 0 && (
+              <Box flexDirection="row" marginTop={1}>
+                <Button key={`chips-${pr.id}`} plain dimColor={dimmed} onPress={press}>
+                  {badges.map(chip => (
+                    <Text size="caption" weight="medium" color={chip.color} backgroundColor={CHIP_TINT[chip.color]}>
+                      {` ${chip.glyph} ${chip.text} `}
+                    </Text>
+                  ))}
+                </Button>
+              </Box>
+            )}
+          </Box>
+          {inGroup && icon(CHECK_ICON, `Already in ${current.groupTitle}`, 16, '✓')}
+        </Box>
+      )
+    }
 
     return (
       <Box flexDirection="column" gap={1}>
         {header}
+        <Input key="search" placeholder="ABV-10637 or 11780" submitLabel="open" value={typed} onInput={onType} onSubmit={onEnter} />
         <Box flexDirection="row" borderStyle="round" borderColor="subtle">
           {SCOPES.map(({ scope: s, label, hotkey }) => {
             const count = current.scopes[s].length
@@ -186,76 +278,51 @@ export const register: Register = on => {
             )
           })}
         </Box>
-        <Box flexDirection="column" borderStyle="round" borderColor="subtle" overflow="hidden">
-          {rows.length === 0 && (
-            <Box padding={1}>
-              <Text dimColor>No open pull requests here.</Text>
-            </Box>
-          )}
-          {rows.map(pr => {
-            const inGroup = isGrouped(pr.key)
-            const badges = chips(pr)
-            const dimmed = Boolean(busy) && busy !== pr.id
-            const press = () => open(pr.id)
-            return (
-              <Box
-                key={`row-${pr.id}`}
-                flexDirection="row"
-                gap={1}
-                paddingX={1}
-                paddingY={1}
-                overflow="hidden"
-                backgroundColor={inGroup ? ACCENT_TINT : undefined}
-                hover={{ backgroundColor: 'rgba(127, 127, 127, 0.12)' }}
-              >
-                {/* The desktop draws a Button as one line and drops line breaks
-                    in it, so each line of the row is its own Button, all opening
-                    the same pull request: the row is clickable wherever it has text. */}
-                <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} gap={0}>
-                  <Button key={`pr-${pr.id}`} plain dimColor={dimmed} onPress={press}>
-                    <Text weight="semibold">{busy === pr.id ? `Opening… ${pr.title}` : pr.title}</Text>
-                  </Button>
-                  <Button key={`meta-${pr.id}`} plain dimColor={dimmed} onPress={press}>
-                    <Text size="caption" dimColor>
-                      {`${pr.repo} #${pr.number} ${age(pr.updatedAt, now)} `}
-                    </Text>
-                    <Text size="caption" color="success">{`+${pr.additions.toLocaleString('en-US')} `}</Text>
-                    <Text size="caption" color="error">{`−${pr.deletions.toLocaleString('en-US')}`}</Text>
-                  </Button>
-                  {badges.length > 0 && (
-                    <Box flexDirection="row" marginTop={1}>
-                      <Button key={`chips-${pr.id}`} plain dimColor={dimmed} onPress={press}>
-                        {badges.map(chip => (
-                          <Text size="caption" weight="medium" color={chip.color} backgroundColor={CHIP_TINT[chip.color]}>
-                            {` ${chip.glyph} ${chip.text} `}
-                          </Text>
-                        ))}
-                      </Button>
-                    </Box>
-                  )}
-                </Box>
-                {inGroup && icon(CHECK_ICON, `Already in ${current.groupTitle}`, 16, '✓')}
+        {searching ? (
+          <Box flexDirection="column" borderStyle="round" borderColor="subtle" overflow="hidden">
+            {hits.length === 0 && (
+              <Box padding={1}>
+                <Text dimColor>{searching.kind === 'failed' ? searching.message : NOT_IN_SNAPSHOT}</Text>
               </Box>
-            )
-          })}
-        </Box>
-        <Box flexDirection="column" alignItems="center" gap={1}>
-          <Button
-            key="open-all"
-            variant="primary"
-            label={busy === '*' ? 'Opening…' : dockLabel(rows.length, pending, current.groupTitle)}
-            hotkey="o"
-            dimColor={pending === 0 || Boolean(busy)}
-            onPress={openAll}
-          />
-          {(note || current.isStale || current.warning) && (
-            <Text size="caption" dimColor>
-              {[note, current.isStale ? 'The list may be out of date.' : '', current.warning ?? '']
-                .filter(Boolean)
-                .join(' ')}
-            </Text>
-          )}
-        </Box>
+            )}
+            {hits.map(hit => row(hit.pr, hit.labels))}
+            {searching.kind === 'hits' && searching.isStale && (
+              <Box paddingX={1}>
+                <Text size="caption" dimColor>
+                  The list may be out of date.
+                </Text>
+              </Box>
+            )}
+          </Box>
+        ) : (
+          <Box flexDirection="column" borderStyle="round" borderColor="subtle" overflow="hidden">
+            {rows.length === 0 && (
+              <Box padding={1}>
+                <Text dimColor>No open pull requests here.</Text>
+              </Box>
+            )}
+            {rows.map(pr => row(pr))}
+          </Box>
+        )}
+        {!searching && (
+          <Box flexDirection="column" alignItems="center" gap={1}>
+            <Button
+              key="open-all"
+              variant="primary"
+              label={busy === '*' ? 'Opening…' : dockLabel(rows.length, pending, current.groupTitle)}
+              hotkey="o"
+              dimColor={pending === 0 || Boolean(busy)}
+              onPress={openAll}
+            />
+            {(note || current.isStale || current.warning) && (
+              <Text size="caption" dimColor>
+                {[note, current.isStale ? 'The list may be out of date.' : '', current.warning ?? '']
+                  .filter(Boolean)
+                  .join(' ')}
+              </Text>
+            )}
+          </Box>
+        )}
       </Box>
     )
   })
