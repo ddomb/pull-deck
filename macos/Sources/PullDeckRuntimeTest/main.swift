@@ -185,6 +185,29 @@ struct RuntimeChecks {
         check(
             "older account revisions cannot replace current data",
             server.state?.viewer?.login == "user")
+        server.search("ab")
+        server.search("abv1")
+        check(
+            "each keystroke sends a search",
+            await eventually { replacement.last("search")?["query"] as? String == "abv1" })
+        let latest = replacement.last("search")!["id"] as! Int
+        server.openTopMatch()
+        replacement.send([
+            "type": "reply", "id": latest - 1, "ok": true,
+            "data": ["status": "none", "prIds": [], "stale": false],
+        ])
+        replacement.send([
+            "type": "reply", "id": latest, "ok": true,
+            "data": ["status": "one", "prIds": ["pr1"], "stale": false],
+        ])
+        check(
+            "the latest query wins over a stale reply",
+            await eventually { server.searchRows?.map(\.id) == ["pr1"] })
+        check(
+            "Enter before the answer opens the top match once it arrives",
+            await eventually { replacement.last("openOne")?["prId"] as? String == "pr1" })
+        server.search("")
+        check("an empty query brings the scope list back", server.searchRows == nil)
         replacement.closePeer()
         print("1..\(checks)")
     }

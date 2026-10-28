@@ -2,11 +2,15 @@ import PullDeckKit
 import PullDeckRuntime
 import SwiftUI
 
+// One panel, one monitor. Not @State: that is a macro the command-line toolchain cannot expand.
+@MainActor private var keyMonitor: Any?
+
 /// The panel. Same grammar as the extension popup — grouped inset rows,
 /// hairline separators, glyph-plus-word status, one accent — expressed in
 /// native controls rather than reimplementing the CSS.
 struct MenuContent: View {
     @ObservedObject var bridge: BridgeServer
+    @FocusState private var searchFocused: Bool
 
     private let accent = Color(red: 0.0, green: 0.467, blue: 0.447)  // oklch(50% .118 190)
 
@@ -29,6 +33,7 @@ struct MenuContent: View {
                     symbol: "exclamationmark.triangle", title: "GitHub said no", body: error.message
                 )
             } else {
+                searchField
                 scopePicker
                 list
                 dock
@@ -40,8 +45,47 @@ struct MenuContent: View {
         .frame(minHeight: 420, alignment: .top)
         .background(Color(nsColor: .windowBackgroundColor))
         // Live only while the panel is actually on screen.
-        .onAppear { bridge.setPanelVisible(true) }
-        .onDisappear { bridge.setPanelVisible(false) }
+        .onAppear {
+            bridge.setPanelVisible(true)
+            if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: handleKey)
+        }
+        .onDisappear {
+            bridge.setPanelVisible(false)
+            if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+            keyMonitor = nil
+        }
+    }
+
+    /// `/` focuses search, and types into a query already started (`acme/above#11780`). Esc clears a query, and with none it
+    /// keeps closing the panel.
+    private func handleKey(_ event: NSEvent) -> NSEvent? {
+        let plain = event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty
+        if plain, event.charactersIgnoringModifiers == "/",
+            bridge.query.isEmpty || !(event.window?.firstResponder is NSText)
+        {
+            searchFocused = true
+            return nil
+        }
+        if event.keyCode == 53, !bridge.query.isEmpty {
+            bridge.search("")
+            return nil
+        }
+        return event
+    }
+
+    // MARK: - Search
+
+    private var searchField: some View {
+        TextField(
+            "Find ABV-10637 or #11780   /",
+            text: Binding(get: { bridge.query }, set: { bridge.search($0) })
+        )
+        .textFieldStyle(.roundedBorder)
+        .focused($searchFocused)
+        .onSubmit { bridge.openTopMatch() }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
     }
 
     // MARK: - Header
@@ -100,13 +144,19 @@ struct MenuContent: View {
     private var list: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                if bridge.pullRequests.isEmpty {
-                    Text(emptyCopy)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.vertical, 40)
-                        .padding(.horizontal, 24)
+                if let hits = bridge.searchRows {
+                    if hits.isEmpty {
+                        emptyText(
+                            "Not in your snapshot. Pull Deck holds Mine, Reviews and Assigned, up to 50 each."
+                        )
+                    } else {
+                        ForEach(Array(hits.enumerated()), id: \.element.id) { index, hit in
+                            if index > 0 { Divider().padding(.leading, 14) }
+                            row(hit.pr, scope: hit.scope)
+                        }
+                    }
+                } else if bridge.pullRequests.isEmpty {
+                    emptyText(emptyCopy)
                 } else {
                     ForEach(Array(bridge.pullRequests.enumerated()), id: \.element.id) {
                         index, pr in
@@ -122,6 +172,15 @@ struct MenuContent: View {
         .frame(maxHeight: 360)
     }
 
+    private func emptyText(_ copy: String) -> some View {
+        Text(copy)
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.vertical, 40)
+            .padding(.horizontal, 24)
+    }
+
     private var emptyCopy: String {
         switch bridge.scope {
         case .mine: return "Nothing you have authored is open right now."
@@ -130,9 +189,9 @@ struct MenuContent: View {
         }
     }
 
-    private func row(_ pr: PullRequest) -> some View {
+    private func row(_ pr: PullRequest, scope: Scope? = nil) -> some View {
         Button {
-            bridge.open(pr)
+            bridge.open(pr.id)
         } label: {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -143,6 +202,7 @@ struct MenuContent: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack(spacing: 5) {
+                        if let scope { Text(scope.title).fontWeight(.medium) }
                         Text(pr.repo).lineLimit(1).truncationMode(.middle)
                         Text("#\(pr.number)")
                         Text(age(pr.updatedAt))

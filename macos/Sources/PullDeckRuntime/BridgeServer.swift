@@ -13,6 +13,9 @@ public final class BridgeServer: ObservableObject {
     @Published public private(set) var relayPath: String?
     @Published public private(set) var scope: Scope = .mine
     @Published public private(set) var isOpening = false
+    @Published public private(set) var query = ""
+    /// The answer to `query`, or nil while there is no query or no answer yet.
+    @Published public private(set) var searchResult: SearchResult?
 
     public static let shared = BridgeServer()
     public static let liveInterval: TimeInterval = 5
@@ -33,6 +36,9 @@ public final class BridgeServer: ObservableObject {
     private var nextCommandID = 1
     private var openingID: Int?
     private var refreshID: Int?
+    private var searchID: Int?
+    private var searches: Set<Int> = []
+    private var openWhenAnswered = false
     private var pending: Set<Int> = []
     private var membership = Set<String>()
     private let socketPath: String
@@ -160,6 +166,10 @@ public final class BridgeServer: ObservableObject {
         membership.removeAll()
         openingID = nil
         refreshID = nil
+        searchID = nil
+        searches.removeAll()
+        searchResult = nil
+        openWhenAnswered = false
         pending.removeAll()
         isOpening = false
         progress = nil
@@ -216,6 +226,14 @@ public final class BridgeServer: ObservableObject {
         case .reply(let id, let ok, let payload, let error):
             guard pending.remove(id) != nil else { return }
             if refreshID == id { refreshID = nil }
+            if searches.remove(id) != nil {
+                // Only the latest query's answer counts; superseded ones are dropped.
+                guard searchID == id else { return }
+                searchID = nil
+                if !ok { lastFailure = error?.message ?? "Search failed." }
+                answered(ok ? payload?.searchResult : nil)
+                return
+            }
             if openingID == id {
                 openingID = nil
                 isOpening = false
@@ -256,6 +274,7 @@ public final class BridgeServer: ObservableObject {
                 return
             }
             if self.refreshID == command.id { self.refreshID = nil }
+            if self.searchID == command.id { self.searchID = nil }
             if self.openingID == command.id {
                 self.openingID = nil
                 self.isOpening = false
@@ -277,12 +296,47 @@ public final class BridgeServer: ObservableObject {
         isOpening = true
         send(.openAll(id: id, scope: scope))
     }
-    public func open(_ pr: PullRequest) {
+    public func open(_ prId: String) {
         guard isAttached, !isOpening else { return }
         let id = nextID()
         openingID = id
         isOpening = true
-        send(.openOne(id: id, prId: pr.id))
+        send(.openOne(id: id, prId: prId))
+    }
+    /// Asks the extension to match `text`. An empty query sends nothing and
+    /// brings the scope list back.
+    public func search(_ text: String) {
+        query = text
+        openWhenAnswered = false
+        guard isAttached, !text.trimmingCharacters(in: .whitespaces).isEmpty else {
+            searchID = nil
+            searchResult = nil
+            return
+        }
+        let id = nextID()
+        searchID = id
+        searches.insert(id)
+        send(.search(id: id, query: text))
+    }
+    /// Enter: opens the top match, now or as soon as the current query is answered.
+    public func openTopMatch() {
+        if searchID != nil {
+            openWhenAnswered = true
+        } else if let top = searchResult?.prIds.first {
+            open(top)
+        }
+    }
+    private func answered(_ result: SearchResult?) {
+        searchResult = result
+        if openWhenAnswered, let top = result?.prIds.first { open(top) }
+        openWhenAnswered = false
+    }
+    /// Search hits in this snapshot, or nil when the scope list should show.
+    public var searchRows: [SearchRow]? {
+        guard let searchResult, !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return nil
+        }
+        return (state?.scopes ?? .empty).rows(for: searchResult.prIds)
     }
     public func setGroupColor(_ color: String) {
         send(.settings(id: nextID(), patch: SettingsPatch(groupColor: color)))

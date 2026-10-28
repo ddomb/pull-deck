@@ -201,6 +201,24 @@ const openOne = run.last((m) => m.type === 'openOne');
 check('/open sends openOne with the prId', openOne?.prId === 'PR_1');
 const busy = await viewer(viewerSocket, 'POST', '/open', { prId: 'PR_2' });
 check('a second open while one runs is refused', busy.status === 409);
+
+// POST /search while that open still runs: search never takes the open lock.
+const searchPending = viewer(viewerSocket, 'POST', '/search', { query: 'abv10637' });
+await until(() => run.toChrome.some((m) => m.type === 'search'));
+const search = run.last((m) => m.type === 'search');
+check('/search sends search with the query', search?.query === 'abv10637');
+const searchData = { status: 'one', prIds: ['PR_1'], stale: false };
+run.send({ type: 'reply', id: search.id, ok: true, data: searchData });
+const searched = await searchPending;
+check(
+  'and answers during an open, with the extension reply',
+  searched.status === 200 &&
+    searched.json?.ok === true &&
+    JSON.stringify(searched.json?.data) === JSON.stringify(searchData),
+  JSON.stringify(searched.json)
+);
+const badSearch = await viewer(viewerSocket, 'POST', '/search', { query: 7 });
+check('a malformed /search body is rejected', badSearch.status === 400);
 run.send({ type: 'reply', id: openOne.id, ok: true, data: { focused: true, failures: [] } });
 const opened = await openPending;
 check(
@@ -216,7 +234,7 @@ const huge = await viewer(viewerSocket, 'POST', '/open', 'x'.repeat(70 * 1024));
 check('an oversized request is rejected', huge.status === 400 || huge.status === 0);
 check(
   'and none of them reached the extension',
-  !run.toChrome.some((m) => m.type === 'settings' || m.prId === 7)
+  !run.toChrome.some((m) => m.type === 'settings' || m.prId === 7 || m.query === 7)
 );
 
 // The app opens after the relay.
