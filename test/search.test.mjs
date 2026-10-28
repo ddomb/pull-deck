@@ -44,11 +44,11 @@ test('the bridge search command returns the table, without pushing state', async
 
   // The Swift and mod tests replay these instead of reimplementing the matcher.
   const file = new URL('./fixtures/search-replies.json', import.meta.url);
-  const json = `${JSON.stringify({ pullRequests: table.pullRequests, replies }, null, 2)}\n`;
-  if (process.env.UPDATE_FIXTURES) writeFileSync(file, json);
-  assert.equal(
-    readFileSync(file, 'utf8'),
-    json,
+  const fresh = { pullRequests: table.pullRequests, replies };
+  if (process.env.UPDATE_FIXTURES) writeFileSync(file, `${JSON.stringify(fresh, null, 2)}\n`);
+  assert.deepEqual(
+    JSON.parse(readFileSync(file, 'utf8')),
+    fresh,
     'search-replies.json is stale: UPDATE_FIXTURES=1 npm test'
   );
 });
