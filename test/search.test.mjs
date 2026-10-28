@@ -59,7 +59,7 @@ test('the bridge search command returns the table, without pushing state', async
   assert.deepEqual(
     JSON.parse(readFileSync(file, 'utf8')),
     fresh,
-    'search-replies.json is stale: UPDATE_FIXTURES=1 npm test'
+    'search-replies.json is stale: UPDATE_FIXTURES=1 npm test && npm run format'
   );
 });
 
