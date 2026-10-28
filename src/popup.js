@@ -46,6 +46,10 @@ const state = {
   truncated: {},
   operationId: null,
   liveLoading: false,
+  query: '', // non-empty: the list shows `matches` from every scope instead of one scope
+  matches: [],
+  searchSeq: 0,
+  searching: Promise.resolve(),
 };
 
 const $ = (id) => document.getElementById(id);
@@ -56,6 +60,7 @@ const dom = {
   refresh: $('refresh'),
   openSettings: $('open-settings'),
   segments: $('segments'),
+  search: $('search'),
   indicator: $('segments-indicator'),
   stage: $('stage'),
   skeleton: $('skeleton'),
@@ -94,7 +99,19 @@ function setIcon(button, markup) {
   button.insertBefore(glyph(markup), button.firstChild);
 }
 
-const visible = () => state.scopes[state.scope] ?? [];
+const SCOPE_NAMES = { mine: 'Mine', reviewing: 'Reviews', assigned: 'Assigned' };
+
+const byId = (id) =>
+  SCOPES.flatMap((scope) => state.scopes[scope] ?? []).find((pr) => pr.id === id);
+
+// Matches are re-read from the latest snapshot so live updates refresh their badges.
+const visible = () =>
+  state.query ? state.matches.map((pr) => byId(pr.id) ?? pr) : (state.scopes[state.scope] ?? []);
+
+const scopesOf = (pr) =>
+  SCOPES.filter((scope) => (state.scopes[scope] ?? []).some((item) => item.id === pr.id)).map(
+    (scope) => SCOPE_NAMES[scope]
+  );
 
 const inGroup = (pr) => {
   const key = pullRequestKey(pr.url);
@@ -126,6 +143,8 @@ function rowFor(pr, index) {
     stat.append(el('span', 'diff-del', `−${pr.deletions}`));
     meta.append(stat);
   }
+  const where = state.query ? scopesOf(pr).join(', ') : '';
+  if (where) meta.append(el('span', 'pr-dot pr-scope', where));
   row.append(meta);
 
   const badges = el('div', 'pr-badges');
@@ -139,10 +158,8 @@ function rowFor(pr, index) {
   }
   row.append(stateCell);
 
-  row.setAttribute(
-    'aria-label',
-    rowLabel(pr, inGroup(pr) ? `Already in ${state.settings.groupTitle}` : 'Not yet in the group')
-  );
+  const grouping = inGroup(pr) ? `Already in ${state.settings.groupTitle}` : 'Not yet in the group';
+  row.setAttribute('aria-label', rowLabel(pr, where ? `${grouping}. In ${where}` : grouping));
 
   row.addEventListener('click', () => openOne(pr));
   row.addEventListener('focus', () => {
@@ -197,7 +214,7 @@ function listSignature() {
       ].join(':')
     )
     .join('|');
-  return `${state.scope}#${state.settings.groupTitle}#${rows}#${[...state.groupKeys].sort().join(',')}`;
+  return `${state.query ? '?' : state.scope}#${state.settings.groupTitle}#${rows}#${[...state.groupKeys].sort().join(',')}`;
 }
 
 function render() {
@@ -331,11 +348,13 @@ function renderDock() {
 }
 
 function renderEmpty() {
-  const copy = {
-    mine: ['No open pull requests', 'Nothing you have authored is open right now.'],
-    reviewing: ['No reviews waiting', 'Nobody has asked you to review anything.'],
-    assigned: ['Nothing assigned', 'No open pull request is assigned to you.'],
-  }[state.scope];
+  const copy = state.query
+    ? ['Not in your snapshot', 'Pull Deck holds Mine, Reviews and Assigned, up to 50 each.']
+    : {
+        mine: ['No open pull requests', 'Nothing you have authored is open right now.'],
+        reviewing: ['No reviews waiting', 'Nobody has asked you to review anything.'],
+        assigned: ['Nothing assigned', 'No open pull request is assigned to you.'],
+      }[state.scope];
 
   dom.emptyNotice.replaceChildren(
     noticeGlyph(icons.empty, 'neutral'),
@@ -768,10 +787,49 @@ function invalidToken(message) {
   dom.tokenInput.select();
 }
 
+/* ------------------------------------------------------------------ search -- */
+
+/** The worker owns matching (searchMatches); only the latest query's reply is shown. */
+function search(raw) {
+  const query = raw.trim();
+  const seq = ++state.searchSeq;
+  if (!query) {
+    dom.search.value = '';
+    state.query = '';
+    state.matches = [];
+    state.focusIndex = 0;
+    render();
+    state.searching = Promise.resolve();
+    return;
+  }
+  state.searching = send({ type: 'search', query })
+    .then((reply) => reply.matches ?? [])
+    .catch(() => [])
+    .then((matches) => {
+      if (seq !== state.searchSeq) return;
+      state.query = query;
+      state.matches = matches;
+      state.focusIndex = 0;
+      render();
+    });
+}
+
+async function openTopMatch() {
+  const seq = state.searchSeq;
+  await state.searching;
+  if (seq !== state.searchSeq || !state.query) return;
+  const top = visible()[0];
+  if (top) openOne(top);
+}
+
 /* ----------------------------------------------------------------- wiring -- */
 
 function moveFocus(delta) {
   const rows = [...dom.list.querySelectorAll('.pr-row')];
+  if (delta < 0 && state.focusIndex === 0 && rows[0] === document.activeElement) {
+    dom.search.focus();
+    return;
+  }
   if (rows.length === 0) return;
   state.focusIndex = Math.max(0, Math.min(rows.length - 1, state.focusIndex + delta));
   rows[state.focusIndex].focus();
@@ -779,6 +837,8 @@ function moveFocus(delta) {
 
 function switchScope(scope) {
   if (scope === state.scope) return;
+  // Picking a tab means "show me that list"; a live search would hide it.
+  if (state.query) search('');
   state.scope = scope;
   state.focusIndex = 0;
   render();
@@ -812,6 +872,19 @@ function wire() {
   dom.segments.addEventListener('click', (event) => {
     const button = event.target.closest('.segment');
     if (button) switchScope(button.dataset.scope);
+  });
+
+  dom.search.addEventListener('input', () => search(dom.search.value));
+  dom.search.addEventListener('keydown', (event) => {
+    if (event.metaKey || event.ctrlKey) return; // ⌘Enter and ⌘R stay global
+    if (event.key === 'Enter') openTopMatch();
+    else if (event.key === 'Escape') search('');
+    else if (event.key === 'ArrowDown') {
+      state.focusIndex = 0;
+      dom.list.querySelector('.pr-row')?.focus();
+    } else if (event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    event.stopPropagation();
   });
 
   dom.segments.addEventListener('keydown', (event) => {
@@ -880,6 +953,12 @@ function wire() {
       return;
     }
     if (state.stage !== 'list' || dom.settings.hasAttribute('data-open')) return;
+    if (event.key === '/' && !meta && !event.target.closest?.('input, textarea')) {
+      event.preventDefault();
+      dom.search.focus();
+      dom.search.select();
+      return;
+    }
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       moveFocus(1);

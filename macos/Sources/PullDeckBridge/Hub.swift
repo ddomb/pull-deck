@@ -40,7 +40,7 @@ final class Hub {
     }
 
     static let freshFor: TimeInterval = 5
-    static let viewerCommands: Set<String> = ["getState", "openOne", "openAll"]
+    static let viewerCommands: Set<String> = ["getState", "openOne", "openAll", "search"]
 
     private let queue = DispatchQueue(label: "com.pulldeck.relay.hub")
     private let config: Config
@@ -288,6 +288,11 @@ final class Hub {
                 ["mine", "reviewing", "assigned"].contains(scope)
             else { return .json(400, ["error": "Expected {\"scope\": mine|reviewing|assigned}."]) }
             return viewerOpen(["type": "openAll", "scope": scope])
+        case ("POST", "/search"):
+            guard let body = decode(request.body), let query = body["query"] as? String
+            else { return .json(400, ["error": "Expected {\"query\": string}."]) }
+            // Runs per keystroke, so it skips the one-open lock and waits briefly.
+            return answer(run(["type": "search", "query": query], timeout: 5))
         default:
             return .json(404, ["error": "No route \(request.method) \(request.path)."])
         }
@@ -309,7 +314,11 @@ final class Hub {
         }
         if busy { return .json(409, ["error": "Another open is still running."]) }
         defer { queue.sync { viewerOpening = false } }
-        guard let reply = run(command, timeout: 30) else {
+        return answer(run(command, timeout: 30))
+    }
+
+    private func answer(_ reply: [String: Any]?) -> HTTPResponse {
+        guard let reply else {
             return .json(504, ["error": "The extension did not finish the command."])
         }
         return .json(

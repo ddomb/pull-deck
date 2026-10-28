@@ -34,12 +34,19 @@ export type Snapshot =
       isGroupElsewhere: boolean
     }
 
+/** The relay's `POST /search` answer for one query, ids in the bridge's rank order. */
+export type Found =
+  | { query: string; kind: 'hits'; prIds: string[]; isStale: boolean }
+  | { query: string; kind: 'failed'; message: string }
+
 declare module 'claude-code' {
   interface PluginState {
     'pull-deck': {
       snapshot: Snapshot | null
       scope: Scope | null
       opening: string | null
+      query: string
+      found: Found | null
     }
   }
 }

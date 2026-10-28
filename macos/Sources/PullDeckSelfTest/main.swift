@@ -216,6 +216,69 @@ check(
     "scopes subscript matches wire names",
     Scopes(mine: [samplePR], reviewing: [], assigned: [])[.mine].count == 1)
 
+// MARK: - Search, replaying the actual JS bridge replies
+
+// test/search.test.mjs writes search-replies.json from the real `search`
+// command; the app only decodes it and maps the ids onto its own rows.
+do {
+    func load(_ name: String) throws -> [String: Any] {
+        let data = try Data(contentsOf: URL(fileURLWithPath: #filePath)
+            .appendingPathComponent("../../../../test/fixtures/\(name)").standardized)
+        return try JSONSerialization.jsonObject(with: data) as! [String: Any]
+    }
+    let cases = try load("search-cases.json")
+    let replies = try load("search-replies.json")["replies"] as! [[String: Any]]
+    var scopes: [Scope: [PullRequest]] = [:]
+    for pr in cases["pullRequests"] as! [[String: Any]] {
+        scopes[Scope(rawValue: pr["scope"] as! String)!, default: []].append(
+            PullRequest(
+                id: pr["id"] as! String, number: pr["number"] as! Int,
+                title: pr["title"] as! String, url: pr["url"] as! String,
+                repo: pr["repo"] as! String, isDraft: false, updatedAt: "", additions: 0,
+                deletions: 0, reviewDecision: nil, checks: nil))
+    }
+    let snapshot = Scopes(
+        mine: scopes[.mine] ?? [], reviewing: scopes[.reviewing] ?? [],
+        assigned: scopes[.assigned] ?? [])
+    let table = cases["cases"] as! [[String: Any]]
+    check("every search case has a recorded reply", table.count == replies.count)
+    for (row, reply) in zip(table, replies) {
+        let query = row["query"] as! String
+        let expect = row["expect"] as! [String]
+        let envelope = try JSONSerialization.data(withJSONObject: [
+            "type": "reply", "id": 1, "ok": true, "data": reply["data"]!,
+        ])
+        guard case .reply(_, true, let payload, _)? = InboundMessage.decode(envelope),
+            let result = payload?.searchResult
+        else {
+            check("search reply for \(query) decodes", false)
+            continue
+        }
+        let ids = snapshot.rows(for: result.prIds).map(\.pr.id)
+        check(
+            "search \(query) finds \(expect.isEmpty ? "none" : expect.joined(separator: ","))",
+            reply["query"] as? String == query && ids == expect
+                && (expect.isEmpty ? result.status == "none" : result.status != "none"),
+            "got \(result.status) \(ids)")
+    }
+} catch {
+    check("search fixtures load", false, "threw \(error)")
+}
+
+do {
+    let json = String(data: try OutboundCommand.search(id: 5, query: "abv10637").encoded(), encoding: .utf8)!
+    check("search sends the query", json.contains(#""type":"search""#) && json.contains(#""query":"abv10637""#), json)
+    let shared = PullRequest(
+        id: "x", number: 1, title: "t", url: "u", repo: "r", isDraft: false,
+        updatedAt: "", additions: 0, deletions: 0, reviewDecision: nil, checks: nil)
+    let rows = Scopes(mine: [], reviewing: [shared], assigned: [shared]).rows(for: ["gone", "x"])
+    check(
+        "a PR in two scopes is one row under the first, missing ids are skipped",
+        rows.map(\.id) == ["x"] && rows.first?.scope == .reviewing)
+} catch {
+    check("search command encodes", false, "threw \(error)")
+}
+
 // MARK: - Host installer, against a real profile tree on disk
 
 do {

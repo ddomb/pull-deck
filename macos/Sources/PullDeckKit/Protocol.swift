@@ -146,9 +146,37 @@ public struct OpenFailure: Codable, Hashable {
     public let message: String
 }
 
+/// The `search` reply. Matching happens in the extension; the app only maps ids to its rows.
+public struct SearchResult: Codable, Hashable {
+    /// `one` | `many` | `none` | `empty`.
+    public let status: String
+    public let prIds: [String]
+    public let stale: Bool
+}
+
+/// One search hit as a row, with the scope that holds it.
+public struct SearchRow: Identifiable, Hashable {
+    public let scope: Scope
+    public let pr: PullRequest
+    public var id: String { pr.id }
+}
+
+extension Scopes {
+    /// Rows for a search reply's ids, in reply order. A PR in two scopes shows
+    /// under the first; ids this snapshot lacks are skipped.
+    public func rows(for ids: [String]) -> [SearchRow] {
+        ids.compactMap { id in
+            Scope.allCases.lazy.compactMap { scope in
+                self[scope].first { $0.id == id }.map { SearchRow(scope: scope, pr: $0) }
+            }.first
+        }
+    }
+}
+
 public enum ReplyPayload: Decodable {
     case open(OpenResult)
     case state(AppState)
+    case search(SearchResult)
     case other
 
     public init(from decoder: Decoder) throws {
@@ -157,6 +185,8 @@ public enum ReplyPayload: Decodable {
             self = .state(state)
         } else if let result = try? container.decode(OpenResult.self) {
             self = .open(result)
+        } else if let result = try? container.decode(SearchResult.self) {
+            self = .search(result)
         } else {
             self = .other
         }
@@ -167,6 +197,10 @@ public enum ReplyPayload: Decodable {
     }
     public var state: AppState? {
         if case .state(let state) = self { return state }
+        return nil
+    }
+    public var searchResult: SearchResult? {
+        if case .search(let result) = self { return result }
         return nil
     }
 }
@@ -267,6 +301,7 @@ public struct OutboundCommand: Encodable {
     public var prId: String?
     public var force: Bool?
     public var patch: SettingsPatch?
+    public var query: String?
 
     public static func getState(id: Int, force: Bool = false) -> OutboundCommand {
         OutboundCommand(id: id, type: "getState", force: force)
@@ -286,13 +321,17 @@ public struct OutboundCommand: Encodable {
         OutboundCommand(id: id, type: "settings", patch: patch)
     }
 
+    public static func search(id: Int, query: String) -> OutboundCommand {
+        OutboundCommand(id: id, type: "search", query: query)
+    }
+
     public static func ping(id: Int) -> OutboundCommand {
         OutboundCommand(id: id, type: "ping")
     }
 
     private init(
         id: Int, type: String, scope: String? = nil, prId: String? = nil,
-        force: Bool? = nil, patch: SettingsPatch? = nil
+        force: Bool? = nil, patch: SettingsPatch? = nil, query: String? = nil
     ) {
         self.id = id
         self.type = type
@@ -300,6 +339,7 @@ public struct OutboundCommand: Encodable {
         self.prId = prId
         self.force = force
         self.patch = patch
+        self.query = query
     }
 
     public func encoded() throws -> Data {

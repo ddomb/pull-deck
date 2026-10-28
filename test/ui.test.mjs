@@ -2,11 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { findMatches } from '../src/resolve.js';
+import { findMatches, searchMatches } from '../src/resolve.js';
+import { mergeScopes } from '../src/github.js';
 import { cached, fakeChrome, pullRequest, tick } from './helpers/chrome.mjs';
 
 let instance = 0;
-async function mount(name, query = '') {
+async function mount(name, query = '', prs = null) {
   const h = fakeChrome();
   const page = new JSDOM(readFileSync(new URL(`../src/${name}.html`, import.meta.url), 'utf8'), {
     url: `https://example.test/src/${name}.html${query}`,
@@ -28,12 +29,28 @@ async function mount(name, query = '') {
     group: { keys: [] },
   };
   const sent = [],
-    all = [pullRequest({ reviewDecision: 'APPROVED', checks: 'FAILURE' })];
+    all = prs ?? [pullRequest({ reviewDecision: 'APPROVED', checks: 'FAILURE' })];
+  if (prs)
+    state.scopes = Object.fromEntries(
+      ['mine', 'reviewing', 'assigned'].map((scope) => [
+        scope,
+        prs.filter((pr) => pr.scope === scope),
+      ])
+    );
   const options = { focused: true, stale: false };
   chrome.tabs.getCurrent = async () => ({ id: 42, windowId: 1 });
   const send = async (message) => {
     sent.push(message);
     if (message.type === 'load') return { ok: true, data: structuredClone(state) };
+    if (message.type === 'search')
+      return {
+        ok: true,
+        data: {
+          query: message.query,
+          ...searchMatches(message.query, mergeScopes({ mine: all })),
+          stale: options.stale,
+        },
+      };
     if (message.type === 'resolve')
       return {
         ok: true,
@@ -153,6 +170,138 @@ test('chooser row names include both review and CI state', async () => {
     const label = h.document.querySelector('.pr-row').getAttribute('aria-label');
     assert.match(label, /Approved/);
     assert.match(label, /Checks failed/);
+  } finally {
+    h.close();
+  }
+});
+
+const table = JSON.parse(
+  readFileSync(new URL('./fixtures/search-cases.json', import.meta.url), 'utf8')
+);
+const tablePrs = () => table.pullRequests.map((pr) => pullRequest(pr));
+
+function typeQuery(h, value) {
+  const box = h.document.querySelector('#search');
+  box.value = value;
+  box.dispatchEvent(new h.window.Event('input', { bubbles: true }));
+  return box;
+}
+const rowIds = (h) => [...h.document.querySelectorAll('#pr-list .pr-row')].map((r) => r.dataset.id);
+const listShown = (h) => h.document.querySelector('#app').dataset.view === 'list';
+
+test('popup search answers the shared query table across every scope', async () => {
+  const h = await mount('popup', '', tablePrs());
+  try {
+    for (const { query, expect } of table.cases) {
+      typeQuery(h, query);
+      await tick();
+      if (expect.length > 0) {
+        assert.ok(listShown(h), query);
+        assert.deepEqual(rowIds(h), expect, query);
+      } else {
+        assert.equal(h.document.querySelector('#app').dataset.view, 'empty', query);
+        assert.match(h.document.querySelector('#empty-notice').textContent, /Not in your snapshot/);
+        assert.match(
+          h.document.querySelector('#empty-notice').textContent,
+          /Pull Deck holds Mine, Reviews and Assigned, up to 50 each\./
+        );
+      }
+    }
+    typeQuery(h, '10637');
+    await tick();
+    const row = h.document.querySelector('.pr-row');
+    assert.equal(row.querySelector('.pr-scope').textContent, 'Reviews');
+    assert.match(row.getAttribute('aria-label'), /In Reviews/);
+    assert.equal(h.sent.filter((m) => m.type === 'openOne').length, 0, 'never auto-opens');
+  } finally {
+    h.close();
+  }
+});
+
+test('popup search keeps only the latest reply when answers arrive out of order', async () => {
+  const h = await mount('popup', '', tablePrs());
+  try {
+    const send = globalThis.__pullDeckTransport.send;
+    let release;
+    const gate = new Promise((r) => (release = r));
+    globalThis.__pullDeckTransport.send = async (message) =>
+      message.query === '11780' ? gate.then(() => send(message)) : send(message);
+    typeQuery(h, '11780');
+    typeQuery(h, '10637');
+    await tick();
+    release();
+    await tick();
+    await tick();
+    assert.deepEqual(rowIds(h), ['pr-b', 'pr-a']);
+  } finally {
+    h.close();
+  }
+});
+
+test('popup search keyboard: / focuses, Enter opens the top match, Esc restores the list', async () => {
+  const h = await mount('popup', '', tablePrs());
+  try {
+    const box = h.document.querySelector('#search');
+    const slash = new h.window.KeyboardEvent('keydown', {
+      key: '/',
+      bubbles: true,
+      cancelable: true,
+    });
+    h.document.body.dispatchEvent(slash);
+    assert.equal(h.document.activeElement, box);
+    assert.equal(slash.defaultPrevented, true);
+
+    const typed = new h.window.KeyboardEvent('keydown', {
+      key: '/',
+      bubbles: true,
+      cancelable: true,
+    });
+    box.dispatchEvent(typed);
+    assert.equal(typed.defaultPrevented, false, '/ is typeable inside the box');
+
+    typeQuery(h, 'abv10637');
+    h.key(box, 'Enter');
+    await tick();
+    await tick();
+    const opened = h.sent.filter((m) => m.type === 'openOne');
+    assert.deepEqual(
+      opened.map((m) => m.pullRequest.id),
+      ['pr-a']
+    );
+
+    h.key(box, 'Escape');
+    assert.equal(box.value, '');
+    assert.deepEqual(rowIds(h), ['pr-a', 'pr-d'], 'back to the Mine list');
+    assert.equal(h.document.querySelector('.pr-scope'), null);
+  } finally {
+    h.close();
+  }
+});
+
+test('arrow keys move between the box and result rows; ⌘Enter still opens the list', async () => {
+  const prs = tablePrs();
+  prs.push(pullRequest({ id: 'pr-z', scope: 'mine', number: 7, headRefName: 'x/ABV-10637-two' }));
+  const h = await mount('popup', '', prs);
+  try {
+    const box = h.document.querySelector('#search');
+    typeQuery(h, 'ABV-10637');
+    await tick();
+    assert.deepEqual(rowIds(h).sort(), ['pr-a', 'pr-z']);
+    const [first, second] = h.document.querySelectorAll('.pr-row');
+    h.key(box, 'ArrowDown');
+    assert.equal(h.document.activeElement, first);
+    h.key(first, 'ArrowDown');
+    assert.equal(h.document.activeElement, second);
+    h.key(second, 'ArrowUp');
+    assert.equal(h.document.activeElement, first);
+    h.key(first, 'ArrowUp');
+    assert.equal(h.document.activeElement, box);
+
+    h.key(box, 'Escape');
+    h.key(h.document.body, 'Enter', { metaKey: true });
+    await tick();
+    const openAll = h.sent.find((m) => m.type === 'openAll');
+    assert.deepEqual(openAll.pullRequests.map((pr) => pr.id).sort(), ['pr-a', 'pr-d', 'pr-z']);
   } finally {
     h.close();
   }

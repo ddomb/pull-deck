@@ -64,6 +64,20 @@
         </button>
       </nav>
 
+      <div class="search" role="search">
+        <input
+          id="search"
+          type="text"
+          placeholder="Ticket or PR number"
+          title="Search (/)"
+          aria-label="Find a pull request by ticket or PR number"
+          aria-keyshortcuts="/"
+          aria-controls="pr-list"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
       <main class="stage" id="stage" role="tabpanel" aria-labelledby="tab-mine">
         <section class="view" data-name="loading" aria-label="Loading pull requests" data-active>
           <div class="skeleton-group" id="skeleton"></div>

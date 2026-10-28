@@ -252,7 +252,7 @@ svg {
 
 .app {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   height: 100%;
   position: relative;
   isolation: isolate;
@@ -274,18 +274,24 @@ svg {
   grid-row: 2;
 }
 
-.stage {
+.search {
   grid-row: 3;
 }
 
-.dock {
+.stage {
   grid-row: 4;
+}
+
+.dock {
+  grid-row: 5;
 }
 
 /* Onboarding and fatal errors own the whole panel: no scope tabs, no dock. */
 .app[data-view='onboarding'] .segments,
+.app[data-view='onboarding'] .search,
 .app[data-view='onboarding'] .dock,
 .app[data-view='error'] .segments,
+.app[data-view='error'] .search,
 .app[data-view='error'] .dock {
   display: none;
 }
@@ -397,6 +403,24 @@ svg {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ============================================================= search ==== */
+
+.search {
+  margin: var(--space-sm) var(--space-lg) 0;
+}
+
+.search input[type='text'] {
+  height: 30px;
+  padding: 0 var(--space-md);
+  font-size: var(--text-sm);
+}
+
+/* Which list a cross-scope match came from. */
+.pr-scope {
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 /* =========================================================== segments ==== */
