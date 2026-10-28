@@ -2,7 +2,7 @@ import { mergeScopes } from './github.js';
 import { openIntoGroup, readGroupState, tabUrl } from './tab-group.js';
 import { readSettings, writeSettings, withSettingsLock, GROUP_COLORS } from './store.js';
 import { pullRequestKey } from './pr-url.js';
-import { findMatches } from './resolve.js';
+import { findMatches, searchMatches } from './resolve.js';
 import { refreshSnapshot, connectAccount, forgetAccount, authEpoch, isStale } from './refresh.js';
 import { refreshBadge } from './badge.js';
 export { LIVE_INTERVAL_MS, mayFetchNow } from './refresh.js';
@@ -231,7 +231,13 @@ export async function openOneById(id, options = {}) {
   return openOne(found, options);
 }
 
-export async function resolveShortcut(query) {
+/** The shortcut URL: strict, because one match opens on its own. */
+export const resolveShortcut = (query) => matchSnapshot(query, findMatches);
+
+/** The search box (popup, menu bar app, Claude mod): ranked, it only lists. */
+export const searchPullRequests = (query) => matchSnapshot(query, searchMatches);
+
+async function matchSnapshot(query, match) {
   const state = await loadState({ branches: true });
   if (state.stage === 'onboarding') return { query, status: 'noToken', matches: [], all: [] };
   if (state.stage === 'error')
@@ -240,7 +246,7 @@ export async function resolveShortcut(query) {
   const incomplete = all.some((pr) => typeof pr.headRefName !== 'string');
   return {
     query,
-    ...findMatches(query, all),
+    ...match(query, all),
     stale: state.stale || incomplete || Boolean(state.error),
     error: state.error,
     truncated: state.truncated,

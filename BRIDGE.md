@@ -36,7 +36,7 @@ Every command carries an integer `id`. Exactly one terminal `reply` corresponds 
 | `openAll` | `scope: mine/reviewing/assigned` | Open result, including partial failures |
 | `openOne` | `prId` | Open result with confirmed `focused` outcome |
 | `settings` | Allowlisted `patch` | Public settings and group state |
-| `search` | `query` | `{status, prIds, stale}` from the shortcut matcher over all scopes; no state push follows |
+| `search` | `query` | `{status, prIds, stale}` from the search matcher over all scopes, best match first; no state push follows |
 | `ping` | — | `{pong:true, version:4}` |
 
 Replies use `{type:"reply", id, ok:true, data}` or `{type:"reply", id, ok:false, error}`. The envelope is decoded independently of command data: a settings/ping payload is not mistaken for an open result. Unknown nonessential payload shapes are tolerated without dropping the reply ID/outcome.

@@ -18,6 +18,7 @@ import {
   openOneById,
   onProgress,
   resolveShortcut,
+  searchPullRequests,
   serializeError,
 } from './app-state.js';
 import {
@@ -66,6 +67,8 @@ async function handle(message, sender) {
       return connectNow();
     case 'resolve':
       return resolveShortcut(message.query ?? '');
+    case 'search':
+      return searchPullRequests(message.query ?? '');
     default:
       throw new Error(`Unknown message: ${message?.type}`);
   }

@@ -7,7 +7,8 @@
       "repo": "acme/above",
       "headRefName": "ddomb/ABV-10637-search-box",
       "title": "Add a search box",
-      "url": "https://github.com/acme/above/pull/11780"
+      "url": "https://github.com/acme/above/pull/11780",
+      "updatedAt": "2026-10-20T10:00:00Z"
     },
     {
       "id": "pr-b",
@@ -16,7 +17,8 @@
       "repo": "acme/above",
       "headRefName": "noa/ABV-9001-cache",
       "title": "Cache the viewer",
-      "url": "https://github.com/acme/above/pull/10637"
+      "url": "https://github.com/acme/above/pull/10637",
+      "updatedAt": "2026-10-19T10:00:00Z"
     },
     {
       "id": "pr-c",
@@ -25,7 +27,38 @@
       "repo": "acme/docs",
       "headRefName": "fix/ABV-8800-typo",
       "title": "Fix a typo",
-      "url": "https://github.com/acme/docs/pull/4120"
+      "url": "https://github.com/acme/docs/pull/4120",
+      "updatedAt": "2026-10-18T10:00:00Z"
+    },
+    {
+      "id": "pr-d",
+      "scope": "mine",
+      "number": 11212,
+      "repo": "acme/above",
+      "headRefName": "ddomb/ABV-7805-pull-deck-search",
+      "title": "Pull Deck search",
+      "url": "https://github.com/acme/above/pull/11212",
+      "updatedAt": "2026-10-27T10:00:00Z"
+    },
+    {
+      "id": "pr-e",
+      "scope": "reviewing",
+      "number": 11210,
+      "repo": "acme/above",
+      "headRefName": "noa/ABV-7806-session",
+      "title": "Refresh the session cache",
+      "url": "https://github.com/acme/above/pull/11210",
+      "updatedAt": "2026-10-26T10:00:00Z"
+    },
+    {
+      "id": "pr-f",
+      "scope": "assigned",
+      "number": 7805,
+      "repo": "acme/docs",
+      "headRefName": "fix/DOC-12-readme",
+      "title": "Readme tweaks",
+      "url": "https://github.com/acme/docs/pull/7805",
+      "updatedAt": "2026-10-25T10:00:00Z"
     }
   ],
   "replies": [
@@ -104,8 +137,8 @@
     {
       "query": "10637",
       "data": {
-        "status": "one",
-        "prIds": ["pr-b"],
+        "status": "many",
+        "prIds": ["pr-b", "pr-a"],
         "stale": false
       }
     },
@@ -119,6 +152,190 @@
     },
     {
       "query": "99999",
+      "data": {
+        "status": "none",
+        "prIds": [],
+        "stale": false
+      }
+    },
+    {
+      "query": "7805",
+      "data": {
+        "status": "many",
+        "prIds": ["pr-f", "pr-d"],
+        "stale": false
+      }
+    },
+    {
+      "query": "1121",
+      "data": {
+        "status": "many",
+        "prIds": ["pr-d", "pr-e"],
+        "stale": false
+      }
+    },
+    {
+      "query": "11212",
+      "data": {
+        "status": "one",
+        "prIds": ["pr-d"],
+        "stale": false
+      }
+    },
+    {
+      "query": "780",
+      "data": {
+        "status": "many",
+        "prIds": ["pr-f", "pr-d", "pr-e"],
+        "stale": false
+      }
+    },
+    {
+      "query": "ABV-78",
+      "data": {
+        "status": "many",
+        "prIds": ["pr-d", "pr-e"],
+        "stale": false
+      }
+    },
+    {
+      "query": "abv 7805",
+      "data": {
+        "status": "one",
+        "prIds": ["pr-d"],
+        "stale": false
+      }
+    },
+    {
+      "query": "ABV_7805",
+      "data": {
+        "status": "one",
+        "prIds": ["pr-d"],
+        "stale": false
+      }
+    },
+    {
+      "query": "abv7805",
+      "data": {
+        "status": "one",
+        "prIds": ["pr-d"],
+        "stale": false
+      }
+    },
+    {
+      "query": "  ABV-7805 ",
+      "data": {
+        "status": "one",
+        "prIds": ["pr-d"],
+        "stale": false
+      }
+    },
+    {
+      "query": "https://github.com/acme/above/pull/11212/files",
+      "data": {
+        "status": "one",
+        "prIds": ["pr-d"],
+        "stale": false
+      }
+    },
+    {
+      "query": "https://linear.app/acme/issue/ABV-7805/pull-deck-search",
+      "data": {
+        "status": "one",
+        "prIds": ["pr-d"],
+        "stale": false
+      }
+    },
+    {
+      "query": "PR 11212",
+      "data": {
+        "status": "one",
+        "prIds": ["pr-d"],
+        "stale": false
+      }
+    },
+    {
+      "query": "#1121",
+      "data": {
+        "status": "many",
+        "prIds": ["pr-d", "pr-e"],
+        "stale": false
+      }
+    },
+    {
+      "query": "above/1121",
+      "data": {
+        "status": "many",
+        "prIds": ["pr-d", "pr-e"],
+        "stale": false
+      }
+    },
+    {
+      "query": "docs/1121",
+      "data": {
+        "status": "none",
+        "prIds": [],
+        "stale": false
+      }
+    },
+    {
+      "query": "search",
+      "data": {
+        "status": "many",
+        "prIds": ["pr-d", "pr-a"],
+        "stale": false
+      }
+    },
+    {
+      "query": "deck search",
+      "data": {
+        "status": "one",
+        "prIds": ["pr-d"],
+        "stale": false
+      }
+    },
+    {
+      "query": "ABV-7807",
+      "data": {
+        "status": "none",
+        "prIds": [],
+        "stale": false
+      }
+    },
+    {
+      "query": "1",
+      "data": {
+        "status": "many",
+        "prIds": ["pr-d", "pr-e", "pr-a", "pr-b", "pr-f"],
+        "stale": false
+      }
+    },
+    {
+      "query": "#7805",
+      "data": {
+        "status": "one",
+        "prIds": ["pr-f"],
+        "stale": false
+      }
+    },
+    {
+      "query": "ABV-7805.",
+      "data": {
+        "status": "one",
+        "prIds": ["pr-d"],
+        "stale": false
+      }
+    },
+    {
+      "query": "SEARCH deck",
+      "data": {
+        "status": "one",
+        "prIds": ["pr-d"],
+        "stale": false
+      }
+    },
+    {
+      "query": "🔥",
       "data": {
         "status": "none",
         "prIds": [],

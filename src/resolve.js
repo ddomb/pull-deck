@@ -10,6 +10,8 @@
 // not notice until you have already commented on it. The tests exist for that
 // asymmetry, and the boundary rules below are written to fail closed.
 
+import { pullRequestKey } from './pr-url.js';
+
 /** Hostnames the shortcut answers to. Both spellings, because both get typed. */
 const STEMS = ['pull-deck', 'pull-dock', 'pulldeck', 'pulldock'];
 
@@ -170,4 +172,107 @@ export function findMatches(query, pullRequests) {
   const matches = scored.filter((entry) => entry.tier === best).map((entry) => entry.pr);
   if (matches.length === 0) return { status: 'none', matches: [], all };
   return { status: matches.length === 1 ? 'one' : 'many', matches, all };
+}
+
+/** Ticket keys in a branch or title, as whole tokens: "abv-7805", "doc-12". */
+const TICKET = /(?<![a-z0-9])[a-z][a-z0-9]*-\d+(?![a-z0-9])/g;
+
+/**
+ * Pasted links and the usual ways a ticket or PR gets typed, as the shorthand
+ * the tiers understand.
+ */
+function normalizeSearch(query) {
+  // Pasted from a sentence: "see ABV-7805." keeps its full stop.
+  const q = String(query ?? '')
+    .trim()
+    .replace(/[.,;:!?]+$/, '');
+  const key = pullRequestKey(q);
+  if (key) return key.slice(key.indexOf('/') + 1);
+  const linear = /linear\.app\/[^/]+\/issue\/([a-z][a-z0-9]*-\d+)/i.exec(q);
+  if (linear) return linear[1];
+  return /^pr\s*#?\s*(\d+)$/i.exec(q)?.[1] ?? q;
+}
+
+function parseSearch(query) {
+  const q = query.toLowerCase();
+  const ref = splitRepoNumber(q);
+  const bare = q.replace(/^#/, '');
+  const ticket = /^[a-z][a-z0-9]*-\d+$/.test(q) ? q : null;
+  const numeric = ref !== null || /^\d+$/.test(bare);
+  return {
+    ref,
+    prNumber: ref ? String(ref.number) : /^\d+$/.test(bare) ? bare : null,
+    ticketNumber: /^\d+$/.test(q) ? q : null,
+    ticket,
+    words: numeric || ticket ? [] : q.split(/\s+/),
+  };
+}
+
+function ticketsOf(pr) {
+  return `${pr.headRefName ?? ''} ${pr.title ?? ''}`.toLowerCase().match(TICKET) ?? [];
+}
+
+const ticketNumber = (ticket) => ticket.slice(ticket.lastIndexOf('-') + 1);
+
+/** Tried only after tierFor, in this order: the first that holds is the tier. */
+const LOOSE_TIERS = [
+  // "1121", "#1121", "above/1121": a PR number still being typed.
+  (s, pr) =>
+    s.prNumber !== null &&
+    String(pr.number).startsWith(s.prNumber) &&
+    (!s.ref || repoMatches(String(pr.repo ?? '').toLowerCase(), s.ref.repo)),
+  // "7805": the number of a ticket in the branch or title.
+  (s, pr) =>
+    s.ticketNumber !== null && ticketsOf(pr).some((t) => ticketNumber(t) === s.ticketNumber),
+  // "780": a ticket number still being typed.
+  (s, pr) =>
+    s.ticketNumber !== null &&
+    ticketsOf(pr).some((t) => ticketNumber(t).startsWith(s.ticketNumber)),
+  // "ABV-78": a ticket still being typed. "ABV-7807" is not a prefix of "ABV-7805".
+  (s, pr) => s.ticket !== null && ticketsOf(pr).some((t) => t.startsWith(s.ticket)),
+  // "deck search": every word somewhere in the branch or title.
+  (s, pr) =>
+    s.words.length > 0 &&
+    s.words.every((word) =>
+      `${pr.headRefName ?? ''} ${pr.title ?? ''}`.toLowerCase().includes(word)
+    ),
+];
+
+const STRICT_TIERS = 6; // tierFor returns 0..5
+
+function rank(query, pullRequests) {
+  const parsed = parseSearch(query);
+  const scored = [];
+  for (const pr of pullRequests) {
+    const strict = tierFor(query, pr);
+    const loose = LOOSE_TIERS.findIndex((holds) => holds(parsed, pr));
+    if (strict !== null) scored.push({ pr, tier: strict });
+    else if (loose !== -1) scored.push({ pr, tier: STRICT_TIERS + loose });
+  }
+  return scored.sort((a, b) => a.tier - b.tier).map((entry) => entry.pr);
+}
+
+/**
+ * Every open pull request the search box query could mean, best first.
+ *
+ * Looser than findMatches on purpose: the search box only lists, it never
+ * opens on its own, so a half-typed number or a word from the title should
+ * find something. Ties keep the input order (mergeScopes: most recent first).
+ *
+ * @param {string} query
+ * @param {object[]} pullRequests
+ * @returns {{status: 'one'|'many'|'none'|'empty', matches: object[], all: object[]}}
+ */
+export function searchMatches(query, pullRequests) {
+  const all = Array.isArray(pullRequests) ? pullRequests : [];
+  const q = normalizeSearch(query);
+  if (!q) return { status: 'empty', matches: [], all };
+
+  // "abv 7805", "ABV_7805" and "abv7805" all mean "abv-7805"; fall back if nothing has it.
+  const dashed = q.replace(/^([a-z]+)[\s_]*(\d+)$/i, '$1-$2');
+  let matches = dashed === q ? [] : rank(dashed, all);
+  if (matches.length === 0) matches = rank(q, all);
+
+  const status = matches.length === 0 ? 'none' : matches.length === 1 ? 'one' : 'many';
+  return { status, matches, all };
 }

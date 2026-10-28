@@ -238,17 +238,17 @@ test('a reply for an older query never replaces the latest one', async ($, on) =
   const seen = engine(on, {
     state: fixtureState,
     search: async (query, clock) => {
-      if (query === '11780') await clock.sleep(1_000)
+      if (query === '11212') await clock.sleep(1_000)
       return recorded(query)
     },
   })
   await openPane($)
   const ui = await $.ui.mount({ plugin: 'pull-deck', surface: 'terminal', ...PANE })
-  await ui.input({ key: 'search', text: '11780', kind: 'change' })
+  await ui.input({ key: 'search', text: '11212', kind: 'change' })
   await ui.input({ key: 'search', text: '10637', kind: 'change' })
   expect(await ui.find({ key: 'pr-pr-b' })).toBeDefined()
   await seen.clock.advance(1_000)
   expect(seen.fetches.filter(f => f.url === 'http://pull-deck/search')).toHaveLength(2)
   expect(await ui.find({ key: 'pr-pr-b' })).toBeDefined()
-  expect(await ui.find({ key: 'pr-pr-a' })).toBeUndefined()
+  expect(await ui.find({ key: 'pr-pr-d' })).toBeUndefined()
 })

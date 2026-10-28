@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { findMatches } from '../src/resolve.js';
+import { findMatches, searchMatches } from '../src/resolve.js';
+import { mergeScopes } from '../src/github.js';
 import { cached, fakeChrome, pullRequest, tick } from './helpers/chrome.mjs';
 
 let instance = 0;
@@ -41,6 +42,15 @@ async function mount(name, query = '', prs = null) {
   const send = async (message) => {
     sent.push(message);
     if (message.type === 'load') return { ok: true, data: structuredClone(state) };
+    if (message.type === 'search')
+      return {
+        ok: true,
+        data: {
+          query: message.query,
+          ...searchMatches(message.query, mergeScopes({ mine: all })),
+          stale: options.stale,
+        },
+      };
     if (message.type === 'resolve')
       return {
         ok: true,
@@ -222,7 +232,7 @@ test('popup search keeps only the latest reply when answers arrive out of order'
     release();
     await tick();
     await tick();
-    assert.deepEqual(rowIds(h), ['pr-b']);
+    assert.deepEqual(rowIds(h), ['pr-b', 'pr-a']);
   } finally {
     h.close();
   }
@@ -261,7 +271,7 @@ test('popup search keyboard: / focuses, Enter opens the top match, Esc restores 
 
     h.key(box, 'Escape');
     assert.equal(box.value, '');
-    assert.deepEqual(rowIds(h), ['pr-a'], 'back to the Mine list');
+    assert.deepEqual(rowIds(h), ['pr-a', 'pr-d'], 'back to the Mine list');
     assert.equal(h.document.querySelector('.pr-scope'), null);
   } finally {
     h.close();
@@ -270,13 +280,13 @@ test('popup search keyboard: / focuses, Enter opens the top match, Esc restores 
 
 test('arrow keys move between the box and result rows; ⌘Enter still opens the list', async () => {
   const prs = tablePrs();
-  prs.push(pullRequest({ id: 'pr-d', scope: 'mine', number: 7, headRefName: 'x/ABV-10637-two' }));
+  prs.push(pullRequest({ id: 'pr-z', scope: 'mine', number: 7, headRefName: 'x/ABV-10637-two' }));
   const h = await mount('popup', '', prs);
   try {
     const box = h.document.querySelector('#search');
     typeQuery(h, 'ABV-10637');
     await tick();
-    assert.deepEqual(rowIds(h).sort(), ['pr-a', 'pr-d']);
+    assert.deepEqual(rowIds(h).sort(), ['pr-a', 'pr-z']);
     const [first, second] = h.document.querySelectorAll('.pr-row');
     h.key(box, 'ArrowDown');
     assert.equal(h.document.activeElement, first);
@@ -291,7 +301,7 @@ test('arrow keys move between the box and result rows; ⌘Enter still opens the 
     h.key(h.document.body, 'Enter', { metaKey: true });
     await tick();
     const openAll = h.sent.find((m) => m.type === 'openAll');
-    assert.deepEqual(openAll.pullRequests.map((pr) => pr.id).sort(), ['pr-a', 'pr-d']);
+    assert.deepEqual(openAll.pullRequests.map((pr) => pr.id).sort(), ['pr-a', 'pr-d', 'pr-z']);
   } finally {
     h.close();
   }

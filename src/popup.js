@@ -789,7 +789,7 @@ function invalidToken(message) {
 
 /* ------------------------------------------------------------------ search -- */
 
-/** The worker owns matching (resolve.js); only the latest query's reply is shown. */
+/** The worker owns matching (searchMatches); only the latest query's reply is shown. */
 function search(raw) {
   const query = raw.trim();
   const seq = ++state.searchSeq;
@@ -802,7 +802,7 @@ function search(raw) {
     state.searching = Promise.resolve();
     return;
   }
-  state.searching = send({ type: 'resolve', query })
+  state.searching = send({ type: 'search', query })
     .then((reply) => reply.matches ?? [])
     .catch(() => [])
     .then((matches) => {

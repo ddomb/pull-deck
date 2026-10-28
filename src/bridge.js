@@ -20,7 +20,7 @@ import {
   openScope,
   openOneById,
   applySettings,
-  resolveShortcut,
+  searchPullRequests,
   onProgress,
   serializeError,
 } from './app-state.js';
@@ -264,7 +264,7 @@ function dispatch(message, target, connectionId) {
       return applySettings(message.patch ?? {});
     // Matching stays in resolve.js; clients get ids and find the rows in their own state.
     case 'search':
-      return resolveShortcut(String(message.query ?? '')).then((result) => ({
+      return searchPullRequests(String(message.query ?? '')).then((result) => ({
         status: result.status,
         prIds: result.matches.map((pr) => pr.id),
         stale: Boolean(result.stale),

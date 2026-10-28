@@ -1,23 +1,33 @@
 // One query table, run through every path a search takes: the matcher itself
-// (popup, via the worker's resolve message) and the bridge `search` command
+// (popup, via the worker's search message) and the bridge `search` command
 // (menu bar app and Claude mod, via the relay).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { findMatches } from '../src/resolve.js';
+import { findMatches, searchMatches } from '../src/resolve.js';
+import { mergeScopes } from '../src/github.js';
 import { fakeChrome, cached, pullRequest, tick } from './helpers/chrome.mjs';
 import { BRIDGE_PROTOCOL_VERSION } from '../src/bridge-protocol.js';
 
 const table = JSON.parse(readFileSync(new URL('./fixtures/search-cases.json', import.meta.url)));
 const rows = table.pullRequests.map(({ scope, ...pr }) => ({ ...pullRequest(pr), scope }));
 
-test('the matcher returns the table', () => {
+test('the search matcher returns the table', () => {
+  // Callers pass mergeScopes output: most recently updated first.
+  const ordered = mergeScopes({ mine: rows });
   for (const { query, expect, why } of table.cases) {
-    const got = findMatches(query, rows).matches.map((pr) => pr.id);
+    const got = searchMatches(query, ordered).matches.map((pr) => pr.id);
     assert.deepEqual(got, expect, `${query} (${why})`);
   }
 });
+
+test('the shortcut matcher stays strict: whole tokens, best tier only', () => {
+  const ids = (query) => findMatches(query, rows).matches.map((pr) => pr.id);
+  assert.deepEqual(ids('7805'), ['pr-f'], 'a bare number is the PR number, not a ticket');
+  assert.deepEqual(ids('1121'), [], 'a half-typed number names nothing');
+});
+const statusFor = (count) => (count === 0 ? 'none' : count === 1 ? 'one' : 'many');
 
 test('the bridge search command returns the table, without pushing state', async () => {
   const scopes = { mine: [], reviewing: [], assigned: [] };
@@ -37,7 +47,7 @@ test('the bridge search command returns the table, without pushing state', async
     const reply = h.calls.posted.find((m) => m.type === 'reply' && m.id === id);
     assert.equal(reply?.ok, true, `${query} replied`);
     assert.deepEqual(reply.data.prIds, expect, `${query} (${why})`);
-    assert.equal(reply.data.status, expect.length === 0 ? 'none' : 'one', query);
+    assert.equal(reply.data.status, statusFor(expect.length), query);
     assert.ok(!h.calls.posted.some((m) => m.type === 'state'), `${query} pushed no state`);
     replies.push({ query, data: reply.data });
   }
