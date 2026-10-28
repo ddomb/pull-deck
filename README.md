@@ -37,9 +37,12 @@ Each scope currently contains up to **50 most recently updated PRs**. The UI say
 
 | Key | Action |
 | --- | --- |
-| ↑ / ↓ | Move between PR rows |
+| / | Focus the search box |
+| Enter in search | Open the top match (never automatic) |
+| Esc in search | Clear the search and return to the scope list |
+| ↑ / ↓ | Move between PR rows; ↓ leaves search, ↑ on the first row returns to it |
 | Enter | Open the focused PR |
-| ⌘Enter / Ctrl+Enter | Open the current list |
+| ⌘Enter / Ctrl+Enter | Open the current list (the search results while searching) |
 | ⌘R / Ctrl+R | Refresh, subject to API cooldown |
 | ← / → | Change scope when the scope tabs are focused |
 | Esc | Close Settings |
