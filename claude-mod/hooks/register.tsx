@@ -5,16 +5,17 @@ import type { Scope } from '../types'
 import {
   NOT_IN_SNAPSHOT,
   SCOPES,
-  age,
-  chips,
+  deckRows,
   dockLabel,
   footnote,
   hitRows,
+  metaLine,
   openFailure,
   shownScope,
   toFound,
   toSnapshot,
-} from './model'
+} from '../herdr/model.js'
+import type { DeckRow } from '../herdr/model.js'
 
 const PANE = 'pull-deck'
 const TITLE = 'Pull Deck'
@@ -204,11 +205,9 @@ export const register: Register = on => {
       if (top) await open(top.pr.id)
     }
     const searching = typed.trim() !== '' && result?.query === typed ? result : null
-    const hits = searching?.kind === 'hits' ? hitRows(current.scopes, searching.prIds) : []
+    const hits = searching ? deckRows(current, scope, searching) : []
 
-    const row = (pr: (typeof rows)[number], labels?: string[]) => {
-      const inGroup = isGrouped(pr.key)
-      const badges = chips(pr)
+    const row = ({ pr, labels, chips: badges, inGroup }: DeckRow) => {
       const dimmed = Boolean(busy) && busy !== pr.id
       const press = () => open(pr.id)
       return (
@@ -231,7 +230,7 @@ export const register: Register = on => {
             </Button>
             <Button key={`meta-${pr.id}`} plain dimColor={dimmed} onPress={press}>
               <Text size="caption" dimColor>
-                {`${labels ? `${labels.join(' · ')} · ` : ''}${pr.repo} #${pr.number} ${age(pr.updatedAt, now)} `}
+                {`${metaLine(pr, labels, now)} `}
               </Text>
               <Text size="caption" color="success">{`+${pr.additions.toLocaleString('en-US')} `}</Text>
               <Text size="caption" color="error">{`−${pr.deletions.toLocaleString('en-US')}`}</Text>
@@ -285,7 +284,7 @@ export const register: Register = on => {
                 <Text dimColor>{searching.kind === 'failed' ? searching.message : NOT_IN_SNAPSHOT}</Text>
               </Box>
             )}
-            {hits.map(hit => row(hit.pr, hit.labels))}
+            {hits.map(row)}
             {searching.kind === 'hits' && searching.isStale && (
               <Box paddingX={1}>
                 <Text size="caption" dimColor>
@@ -301,7 +300,7 @@ export const register: Register = on => {
                 <Text dimColor>No open pull requests here.</Text>
               </Box>
             )}
-            {rows.map(pr => row(pr))}
+            {deckRows(current, scope, null).map(row)}
           </Box>
         )}
         {!searching && (

@@ -1,28 +1,31 @@
-import type { Found, PullRequest, Scope, Snapshot } from '../types'
+// What the Pull Deck panes show, from the relay's replies. Plain JavaScript with no imports, so the
+// Claude Code mod (hooks/register.tsx) and the Herdr.app mod (this folder's main.js) load the same file:
+// Herdr refuses imports from outside its mod folder and runs no TypeScript, and the Claude Code mod
+// reads nothing outside the plugin. Types are in model.d.ts.
 
-export const SCOPES: readonly { scope: Scope; label: string; hotkey: string }[] = [
+export const SCOPES = [
   { scope: 'mine', label: 'Mine', hotkey: 'm' },
   { scope: 'reviewing', label: 'Reviews', hotkey: 'r' },
   { scope: 'assigned', label: 'Assigned', hotkey: 'a' },
 ]
 
-type Json = Record<string, unknown>
-const isObject = (value: unknown): value is Json =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-const messageOf = (value: unknown): string | null =>
-  isObject(value) && typeof value.message === 'string' ? value.message : null
+const isObject = value => typeof value === 'object' && value !== null && !Array.isArray(value)
+const messageOf = value => (isObject(value) && typeof value.message === 'string' ? value.message : null)
 
-const DOWN =
+export const DOWN =
   'The Pull Deck bridge is not reachable. Open Chrome with the Pull Deck extension; install the bridge once by opening Pull Deck.app.'
 
 /** The relay's `GET /state` answer, checked field by field: it is outside data. */
-export function toSnapshot(status: number, text: string): Snapshot {
+export function toSnapshot(status, text) {
   if (status === 0) return { kind: 'down', reason: DOWN }
-  let body: unknown
+  let body
   try {
     body = JSON.parse(text)
   } catch {
-    return { kind: 'error', message: `The bridge answered ${status} with something that is not JSON.` }
+    return {
+      kind: 'error',
+      message: `The bridge answered ${status} with something that is not JSON.`,
+    }
   }
   if (!isObject(body)) return { kind: 'error', message: 'The bridge answered with an unexpected shape.' }
   if (status !== 200) return { kind: 'error', message: messageOf(body) ?? String(body.error ?? status) }
@@ -35,11 +38,14 @@ export function toSnapshot(status: number, text: string): Snapshot {
   }
   if (state.stage === 'onboarding') return { kind: 'onboarding' }
   if (state.stage !== 'list') {
-    return { kind: 'error', message: messageOf(state.error) ?? 'The extension could not load pull requests.' }
+    return {
+      kind: 'error',
+      message: messageOf(state.error) ?? 'The extension could not load pull requests.',
+    }
   }
   const raw = isObject(state.scopes) ? state.scopes : {}
   const truncated = isObject(state.truncated) ? state.truncated : {}
-  const scopes = {} as Record<Scope, PullRequest[]>
+  const scopes = {}
   for (const { scope } of SCOPES) {
     const list = Array.isArray(raw[scope]) ? raw[scope] : []
     scopes[scope] = list.filter(isObject).flatMap(toPullRequest)
@@ -58,13 +64,13 @@ export function toSnapshot(status: number, text: string): Snapshot {
         : 'Pull Requests',
     groupKeys:
       isObject(state.group) && Array.isArray(state.group.keys)
-        ? state.group.keys.filter((key): key is string => typeof key === 'string')
+        ? state.group.keys.filter(key => typeof key === 'string')
         : [],
     isGroupElsewhere: isObject(state.group) && state.group.otherWindow === true,
   }
 }
 
-function toPullRequest(pr: Json): PullRequest[] {
+function toPullRequest(pr) {
   if (typeof pr.id !== 'string' || typeof pr.title !== 'string' || typeof pr.url !== 'string') return []
   return [
     {
@@ -85,17 +91,15 @@ function toPullRequest(pr: Json): PullRequest[] {
 }
 
 /** The scope the pane shows: the person's pick, else the first with rows. */
-export function shownScope(snapshot: Snapshot | null, picked: Scope | null): Scope {
+export function shownScope(snapshot, picked) {
   if (picked) return picked
   if (snapshot?.kind !== 'list') return 'mine'
   return SCOPES.find(({ scope }) => snapshot.scopes[scope].length > 0)?.scope ?? 'mine'
 }
 
-export type Chip = { text: string; glyph: string; color: 'success' | 'error' | 'warning' | 'subtle' }
-
 /** The menu bar app's badges (MenuContent.swift badgeItems), as words. */
-export function chips(pr: PullRequest): Chip[] {
-  const out: Chip[] = []
+export function chips(pr) {
+  const out = []
   if (pr.isDraft) out.push({ text: 'Draft', glyph: '◌', color: 'subtle' })
   if (pr.reviewDecision === 'APPROVED') out.push({ text: 'Approved', glyph: '✓', color: 'success' })
   else if (pr.reviewDecision === 'CHANGES_REQUESTED') out.push({ text: 'Changes', glyph: '⊖', color: 'error' })
@@ -108,7 +112,7 @@ export function chips(pr: PullRequest): Chip[] {
 }
 
 /** The menu bar app's dock footnote (MenuContent.swift footnote). */
-export function footnote(total: number, pending: number, isTruncated: boolean, isElsewhere: boolean): string {
+export function footnote(total, pending, isTruncated, isElsewhere) {
   if (isTruncated) return 'Showing the 50 most recently updated pull requests.'
   if (isElsewhere) return 'The group lives in another window.'
   const already = total - pending
@@ -117,12 +121,12 @@ export function footnote(total: number, pending: number, isTruncated: boolean, i
 }
 
 /** The dock button's words (MenuContent.swift dock). */
-export function dockLabel(total: number, pending: number, groupTitle: string): string {
+export function dockLabel(total, pending, groupTitle) {
   if (pending === 0) return total === 0 ? 'Nothing to open' : `All ${total} in “${groupTitle}”`
   return `Open ${pending} in “${groupTitle}”`
 }
 
-export function age(iso: string, now: number): string {
+export function age(iso, now) {
   const then = Date.parse(iso)
   if (Number.isNaN(then)) return ''
   const minutes = Math.max(0, Math.round((now - then) / 60_000))
@@ -133,9 +137,9 @@ export function age(iso: string, now: number): string {
 }
 
 /** The first failure an open reported, or why the call itself failed. */
-export function openFailure(status: number, text: string): string | null {
+export function openFailure(status, text) {
   if (status === 0) return DOWN
-  let body: unknown
+  let body
   try {
     body = JSON.parse(text)
   } catch {
@@ -151,9 +155,9 @@ export function openFailure(status: number, text: string): string | null {
 export const NOT_IN_SNAPSHOT = 'Not in your snapshot. Pull Deck holds Mine, Reviews and Assigned, up to 50 each.'
 
 /** The relay's `POST /search` answer, checked field by field: it is outside data. */
-export function toFound(query: string, status: number, text: string): Found {
+export function toFound(query, status, text) {
   if (status === 0) return { query, kind: 'failed', message: DOWN }
-  let body: unknown
+  let body
   try {
     body = JSON.parse(text)
   } catch {
@@ -168,17 +172,41 @@ export function toFound(query: string, status: number, text: string): Found {
   return {
     query,
     kind: 'hits',
-    prIds: ids.filter((id): id is string => typeof id === 'string'),
+    prIds: ids.filter(id => typeof id === 'string'),
     isStale: body.data.stale === true,
   }
 }
 
 /** The matched ids as rows of the pane's own snapshot, once each, with every scope label it sits under. */
-export function hitRows(scopes: Record<Scope, PullRequest[]>, prIds: string[]): { pr: PullRequest; labels: string[] }[] {
+export function hitRows(scopes, prIds) {
   return prIds.flatMap(id => {
     const homes = SCOPES.filter(({ scope }) => scopes[scope].some(pr => pr.id === id))
     if (homes.length === 0) return []
-    const pr = scopes[homes[0].scope].find(pr => pr.id === id)!
+    const pr = scopes[homes[0].scope].find(pr => pr.id === id)
     return [{ pr, labels: homes.map(home => home.label) }]
   })
+}
+
+/**
+ * The rows a pane draws for a list snapshot, in order: the search's matches while `found` answers the
+ * typed text, else the shown scope. Both mods draw exactly these, so they agree on rows and order.
+ */
+export function deckRows(snapshot, scope, found) {
+  const grouped = new Set(snapshot.groupKeys)
+  const entries = found
+    ? found.kind === 'hits'
+      ? hitRows(snapshot.scopes, found.prIds)
+      : []
+    : snapshot.scopes[scope].map(pr => ({ pr, labels: null }))
+  return entries.map(({ pr, labels }) => ({
+    pr,
+    labels,
+    chips: chips(pr),
+    inGroup: pr.key !== null && grouped.has(pr.key),
+  }))
+}
+
+/** The row's second line before the diff size: scope labels (search only), repo, number and age. */
+export function metaLine(pr, labels, now) {
+  return `${labels ? `${labels.join(' · ')} · ` : ''}${pr.repo} #${pr.number} ${age(pr.updatedAt, now)}`
 }
