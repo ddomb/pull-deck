@@ -16,3 +16,5 @@ __pycache__/
 
 # Types the Claude Code engine lays for the mod
 claude-mod/.claude-plugin/types/
+claude-mod/herdr/gpui-kit.d.ts
+claude-mod/herdr/jsconfig.json

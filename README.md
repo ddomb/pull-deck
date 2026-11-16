@@ -121,6 +121,46 @@ claude plugin install pull-deck --marketplace ddomb/pull-deck
 
 In the desktop app, click + next to the prompt box, then **Plugins**, **Add marketplace** with `ddomb/pull-deck`, then **Add plugin**.
 
+## Herdr.app mod
+
+`claude-mod/herdr/` is a [Herdr.app](https://herdr.dev) mod that shows the same lists as a block in Herdr's sidebar, drawn with Herdr's theme. It uses the same rows and search ranking as the Claude Code pane, and reaches the bridge relay the same way, so the same requirements apply: the browser must be open with the extension loaded, and the bridge must be installed once.
+
+Link it into Herdr, then add a block to a layout of your own (Herdr's shipped layouts are read-only, so clone one first):
+
+```bash
+ln -s ~/pull-deck/claude-mod/herdr ~/.config/herdr-app/mods/pull-deck
+```
+
+```json
+{ "id": "pull-deck", "type": "block", "content": { "mod": "pull-deck", "props": { "scopes": ["mine"] } }, "size": { "weight": 1 }, "min": 90 }
+```
+
+Run `herdr-app check ~/.config/herdr-app/mods/pull-deck` after any change. Herdr does not reload a linked mod when its files change: change the block's props or restart Herdr.
+
+Click into the block, then:
+
+| Key | Action |
+| --- | --- |
+| `/` | Search, by ticket, PR number or words |
+| `↑` `↓` | Select a row |
+| `Enter` | Open the selected pull request and focus its tab |
+| `⌘Enter` | Open every pull request in the scope |
+| `Esc` | Clear the search |
+
+Clicking a row opens it too. The open-all button is hidden when every pull request is already in the group.
+
+Props, all optional:
+
+| Prop | Values | Default |
+| --- | --- | --- |
+| `look` | `cards`, `lines`, `ledger` | `cards` |
+| `scopes` | any of `mine`, `reviewing`, `assigned`; with one, the scope bar is hidden | all three |
+| `fields` | any of `repo`, `age`, `review`, `ci`, `diff` | all five |
+| `every` | milliseconds between relay reads | `15000` |
+| `socket` | the relay's viewer socket | `~/Library/Application Support/PullDeck/viewer.sock` |
+
+Key commands for `keys.json` or `herdr-app do`: `pull-deck.focus`, `pull-deck.open`, `pull-deck.open-all`, `pull-deck.up`, `pull-deck.down`, `pull-deck.refresh`, and `pull-deck.search:<text>`, which fills the search without taking the keyboard.
+
 ## Permissions
 
 | Permission | Purpose |
