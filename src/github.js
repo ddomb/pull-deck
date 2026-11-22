@@ -5,6 +5,8 @@
 // requests per pull request. One GraphQL document covers all three scopes, the
 // viewer identity, and the rate-limit budget in a single round trip.
 
+import { DEFAULT_REPO } from './resolve.js';
+
 const ENDPOINT = 'https://api.github.com/graphql';
 
 const SCOPE_QUERIES = {
@@ -15,15 +17,7 @@ const SCOPE_QUERIES = {
 
 export const SCOPES = /** @type {const} */ (['mine', 'reviewing', 'assigned']);
 
-const DOCUMENT = `
-query PullDeck($mine: String!, $reviewing: String!, $assigned: String!, $first: Int!) {
-  viewer { login avatarUrl(size: 64) }
-  mine: search(query: $mine, type: ISSUE, first: $first) { pageInfo { hasNextPage } nodes { ...PullDeckPR } }
-  reviewing: search(query: $reviewing, type: ISSUE, first: $first) { pageInfo { hasNextPage } nodes { ...PullDeckPR } }
-  assigned: search(query: $assigned, type: ISSUE, first: $first) { pageInfo { hasNextPage } nodes { ...PullDeckPR } }
-  rateLimit { remaining limit resetAt cost }
-}
-
+const FRAGMENT = `
 fragment PullDeckPR on PullRequest {
   id
   number
@@ -40,6 +34,31 @@ fragment PullDeckPR on PullRequest {
     nodes { commit { statusCheckRollup { state } } }
   }
 }`;
+
+const DOCUMENT = `
+query PullDeck($mine: String!, $reviewing: String!, $assigned: String!, $first: Int!) {
+  viewer { login avatarUrl(size: 64) }
+  mine: search(query: $mine, type: ISSUE, first: $first) { pageInfo { hasNextPage } nodes { ...PullDeckPR } }
+  reviewing: search(query: $reviewing, type: ISSUE, first: $first) { pageInfo { hasNextPage } nodes { ...PullDeckPR } }
+  assigned: search(query: $assigned, type: ISSUE, first: $first) { pageInfo { hasNextPage } nodes { ...PullDeckPR } }
+  rateLimit { remaining limit resetAt cost }
+}
+${FRAGMENT}`;
+
+// Measured on Above-Security/above: cost 1 each, about 0.6 to 0.8 seconds.
+const NUMBER_DOCUMENT = `
+query PullDeckNumber($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) { ...PullDeckPR } }
+  rateLimit { remaining limit resetAt cost }
+}
+${FRAGMENT}`;
+
+const TICKET_DOCUMENT = `
+query PullDeckTicket($q: String!) {
+  search(query: $q, type: ISSUE, first: 100) { pageInfo { hasNextPage } nodes { ...PullDeckPR } }
+  rateLimit { remaining limit resetAt cost }
+}
+${FRAGMENT}`;
 
 /** Failure the UI can act on, rather than a generic throw. */
 export class GitHubError extends Error {
@@ -72,8 +91,82 @@ function parseRetryAt(headers) {
  * @param {string} token
  * @param {{first?: number, signal?: AbortSignal}} [options]
  */
-export async function fetchPullRequests(token, options = {}) {
-  const { first = 50, signal, timeoutMs = 15_000 } = options;
+export function fetchPullRequests(token, options = {}) {
+  const { first = 50 } = options;
+  return withDeadline(options, async (signal) => {
+    const { payload, errors, types } = await request(
+      token,
+      { query: DOCUMENT, variables: { ...SCOPE_QUERIES, first } },
+      signal
+    );
+    // GraphQL reports most failures inside a 200.
+    if (errors.length > 0) {
+      const first = errors[0]?.message || 'GitHub rejected the query.';
+      if (types.includes('FORBIDDEN') || types.includes('INSUFFICIENT_SCOPES')) {
+        throw new GitHubError('forbidden', first);
+      }
+      if (!payload.data?.viewer) throw new GitHubError('malformed', first);
+      throw new GitHubError(
+        'partial',
+        'GitHub returned incomplete pull request data. The last complete list is retained.'
+      );
+    }
+    return scopesFrom(payload?.data);
+  });
+}
+
+/**
+ * Look up pull requests outside the viewer's scopes: one by number, or every
+ * one GitHub's search returns for a ticket. Nothing here is cached or stored.
+ *
+ * @param {string} token
+ * @param {{kind: 'number', owner: string, name: string, number: number}
+ *   | {kind: 'ticket', ticket: string}} lookup from resolve.js outsideQuery
+ * @param {{signal?: AbortSignal, timeoutMs?: number}} [options]
+ * @returns {Promise<{pullRequests: object[], complete: boolean}>}
+ */
+export function lookupPullRequests(token, lookup, options = {}) {
+  const body =
+    lookup.kind === 'number'
+      ? {
+          query: NUMBER_DOCUMENT,
+          variables: { owner: lookup.owner, name: lookup.name, number: lookup.number },
+        }
+      : {
+          query: TICKET_DOCUMENT,
+          variables: {
+            q: `repo:${DEFAULT_REPO.owner}/${DEFAULT_REPO.name} is:pr "${lookup.ticket}"`,
+          },
+        };
+  return withDeadline(options, async (signal) => {
+    const { payload, errors, types } = await request(token, body, signal);
+    // A number or repository GitHub does not know arrives as NOT_FOUND inside a 200.
+    if (errors.length > 0 && types.every((type) => type === 'NOT_FOUND'))
+      return { pullRequests: [], complete: true };
+    if (errors.length > 0) {
+      const message = errors[0]?.message || 'GitHub rejected the lookup.';
+      if (types.includes('FORBIDDEN') || types.includes('INSUFFICIENT_SCOPES'))
+        throw new GitHubError('forbidden', message);
+      throw new GitHubError('malformed', message);
+    }
+    const data = payload?.data;
+    if (lookup.kind === 'number') {
+      if (!data || !('repository' in data))
+        throw new GitHubError('malformed', 'GitHub sent a lookup Pull Deck could not read.');
+      const node = data.repository?.pullRequest;
+      return { pullRequests: node?.number ? [normalize(node)] : [], complete: true };
+    }
+    if (!Array.isArray(data?.search?.nodes))
+      throw new GitHubError('malformed', 'GitHub sent a search Pull Deck could not read.');
+    return {
+      pullRequests: data.search.nodes.filter((node) => node?.number).map(normalize),
+      complete: !data.search.pageInfo?.hasNextPage,
+    };
+  });
+}
+
+/** One deadline for one request, and a caller's abort that wins over it. */
+async function withDeadline({ signal, timeoutMs = 15_000 }, run) {
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
@@ -81,7 +174,7 @@ export async function fetchPullRequests(token, options = {}) {
   const timeout = setTimeout(abort, timeoutMs);
 
   try {
-    return await requestPullRequests(token, first, controller.signal);
+    return await run(controller.signal);
   } catch (error) {
     if (signal?.aborted) throw new DOMException('Request superseded.', 'AbortError');
     if (controller.signal.aborted)
@@ -93,7 +186,8 @@ export async function fetchPullRequests(token, options = {}) {
   }
 }
 
-async function requestPullRequests(token, first, signal) {
+/** POST one document; throws for transport, auth and rate-limit failures. */
+async function request(token, body, signal) {
   let response;
   try {
     response = await fetch(ENDPOINT, {
@@ -104,10 +198,7 @@ async function requestPullRequests(token, first, signal) {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify({
-        query: DOCUMENT,
-        variables: { ...SCOPE_QUERIES, first },
-      }),
+      body: JSON.stringify(body),
     });
   } catch (cause) {
     if (cause?.name === 'AbortError') throw cause;
@@ -141,21 +232,10 @@ async function requestPullRequests(token, first, signal) {
   if (response.status === 403)
     throw new GitHubError('forbidden', 'This token is not allowed to read those repositories.');
   if (!response.ok) throw new GitHubError('server', `GitHub returned ${response.status}.`);
+  return { payload, errors, types };
+}
 
-  // GraphQL reports most failures inside a 200.
-  if (errors.length > 0) {
-    const first = errors[0]?.message || 'GitHub rejected the query.';
-    if (types.includes('FORBIDDEN') || types.includes('INSUFFICIENT_SCOPES')) {
-      throw new GitHubError('forbidden', first);
-    }
-    if (!payload.data?.viewer) throw new GitHubError('malformed', first);
-    throw new GitHubError(
-      'partial',
-      'GitHub returned incomplete pull request data. The last complete list is retained.'
-    );
-  }
-
-  const data = payload?.data;
+function scopesFrom(data) {
   if (!data?.viewer?.login) {
     throw new GitHubError('malformed', 'GitHub did not return an account for this token.');
   }

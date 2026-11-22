@@ -1,4 +1,4 @@
-import { fetchPullRequests, GitHubError } from './github.js';
+import { fetchPullRequests, lookupPullRequests, GitHubError } from './github.js';
 import { readSettings, writeSettings, withSettingsLock } from './store.js';
 import { refreshBadge } from './badge.js';
 import { serializeError } from './errors.js';
@@ -9,13 +9,18 @@ const MIN_INTERVAL_MS = 4_000;
 let epoch = 0;
 let inFlight = null;
 
+/** Under 100 points left, nothing may ask GitHub until the budget resets. */
+export function budgetAllows(cache, now = Date.now()) {
+  const remaining = cache?.rateLimit?.remaining;
+  if (typeof remaining !== 'number' || remaining >= 100) return true;
+  const resetAt = Date.parse(cache.rateLimit?.resetAt ?? '');
+  return Number.isFinite(resetAt) && now >= resetAt;
+}
+
 export function mayFetchNow(cache, now = Date.now()) {
   if (!cache?.fetchedAt) return true;
   const remaining = cache.rateLimit?.remaining;
-  if (typeof remaining === 'number' && remaining < 100) {
-    const resetAt = Date.parse(cache.rateLimit?.resetAt ?? '');
-    return Number.isFinite(resetAt) && now >= resetAt;
-  }
+  if (typeof remaining === 'number' && remaining < 100) return budgetAllows(cache, now);
   return (
     now - cache.fetchedAt >=
     (typeof remaining === 'number' && remaining < 500 ? 60_000 : MIN_INTERVAL_MS)
@@ -155,4 +160,39 @@ export async function connectAccount(token) {
     if (changed === epoch) throw error;
   }
   return readSettings();
+}
+
+/**
+ * Ask GitHub about pull requests outside my scopes. Read-only by design: the
+ * answer is returned and forgotten. No cache, error, failure count, budget or
+ * cooldown is written, so nothing the popup, the app or a mod reads changes,
+ * and a lookup can neither delay nor be delayed by the next refresh.
+ *
+ * @returns {Promise<{pullRequests: object[], complete: boolean} | {problem: object}>}
+ */
+export async function lookupOutside(lookup) {
+  const started = epoch;
+  const settings = await readSettings();
+  if (!settings.token) return { pullRequests: [], complete: true };
+  if (!budgetAllows(settings.cache)) {
+    const { remaining, resetAt } = settings.cache.rateLimit;
+    const at = Date.parse(resetAt ?? '');
+    const when = Number.isFinite(at)
+      ? `at ${new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      : 'soon';
+    return {
+      problem: {
+        kind: 'rateLimited',
+        message: `GitHub has ${remaining} of its hourly points left, so only your own pull requests were searched. The budget resets ${when}.`,
+      },
+    };
+  }
+  try {
+    const found = await lookupPullRequests(settings.token, lookup);
+    // The account changed while GitHub answered: the answer belongs to nobody.
+    if (started !== epoch) return { pullRequests: [], complete: true };
+    return found;
+  } catch (error) {
+    return { problem: serializeError(error) };
+  }
 }

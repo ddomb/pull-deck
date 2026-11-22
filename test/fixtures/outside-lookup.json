@@ -1,0 +1,1110 @@
+[
+  {
+    "ticket": "ABV-13001",
+    "query": "quoted",
+    "linear": [14144, 14231],
+    "hits": [
+      {
+        "number": 14177,
+        "state": "OPEN",
+        "headRefName": "dev/abv-13002-w-w-w-w-w-w-w",
+        "title": "ABV-13002: w w w w w w w w w w"
+      },
+      {
+        "number": 14181,
+        "state": "OPEN",
+        "headRefName": "dev/abv-13003-w-w-w-w-w-w-w",
+        "title": "ABV-13003: w w w w w w w w w w w w w w"
+      },
+      {
+        "number": 14231,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13001-w-w-w",
+        "title": "ABV-13001: w w w w w w w w w w w"
+      },
+      {
+        "number": 14144,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13001-w-w-w-w-w-w-w",
+        "title": "ABV-13001: w w w w w w w w w w w"
+      },
+      {
+        "number": 14180,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13007-w-w-w-w-w-w-w",
+        "title": "ABV-13007: w w w w w w w w w"
+      },
+      {
+        "number": 14220,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13007-w-w-w-w-w-w-w-w",
+        "title": "ABV-13007: w w w w w w w w w"
+      },
+      {
+        "number": 13035,
+        "state": "MERGED",
+        "headRefName": "dev/abv-11590-w-w",
+        "title": "ABV-11590: w w w'w w w w w w w"
+      },
+      {
+        "number": 13193,
+        "state": "OPEN",
+        "headRefName": "dev/abv-12022-w-w-1-w",
+        "title": "ABV-12022: w: w w w w w w w w w:w-w-1 w"
+      },
+      {
+        "number": 14055,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12939-w-w-w",
+        "title": "ABV-12939: w w w_w: w w, w w w, w w, w w w"
+      },
+      {
+        "number": 14185,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13004-w-w-w-w-w-w",
+        "title": "ABV-13004: w w w w w w w w w"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-13138",
+    "query": "quoted",
+    "linear": [14433, 14435, 14481, 14518, 14542, 14544],
+    "hits": [
+      {
+        "number": 14263,
+        "state": "OPEN",
+        "headRefName": "dev/abv-13163-w-w-w-w",
+        "title": "ABV-13163: w w/w/w/w.w"
+      },
+      {
+        "number": 14221,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13139-w-w-w",
+        "title": "ABV-13139: w w w"
+      },
+      {
+        "number": 14561,
+        "state": "OPEN",
+        "headRefName": "dev/abv-13945-w-w-w-w-w",
+        "title": "ABV-13945: w w-w-w/w/w/w-w/w/w.w"
+      },
+      {
+        "number": 14293,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13306-w-w-w-w",
+        "title": "ABV-13306: w w/w/w/w.w"
+      },
+      {
+        "number": 14330,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13461-w-w-w-w",
+        "title": "ABV-13461: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14295,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13165-w-w-w-w",
+        "title": "ABV-13165: w w/w/w/w.w"
+      },
+      {
+        "number": 14359,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13312-w-w-w",
+        "title": "ABV-13312: w w w w w (w w w, w w-w)"
+      },
+      {
+        "number": 14537,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13801-w",
+        "title": "ABV-13801: w w/w/w/w/w/w.w"
+      },
+      {
+        "number": 14430,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13642-w-w-w-w",
+        "title": "ABV-13642: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14428,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13614-w-w-w-w",
+        "title": "ABV-13614: w w/w/w/w.w"
+      },
+      {
+        "number": 14449,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13607-w-w-w",
+        "title": "ABV-13607: w w/w/w/w.w"
+      },
+      {
+        "number": 14429,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13639-w-w",
+        "title": "ABV-13639: w w/w/w/w.w"
+      },
+      {
+        "number": 14510,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13858-w-w-w",
+        "title": "ABV-13858: w w-w-w/w/w/w/w-w-w.w"
+      },
+      {
+        "number": 14314,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13337-w-w-w-w",
+        "title": "ABV-13337: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14547,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13810-w-w-w-w-w",
+        "title": "ABV-13810: w w.w w w w w"
+      },
+      {
+        "number": 14360,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13147-w-w-w",
+        "title": "ABV-13147: w w w"
+      },
+      {
+        "number": 14536,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13791-w",
+        "title": "ABV-13791: w w/w/w/w.w"
+      },
+      {
+        "number": 14427,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13613-w-w-w",
+        "title": "ABV-13613: w w/w/w/w.w"
+      },
+      {
+        "number": 14524,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13711-w-w-w-w",
+        "title": "ABV-13711: w w.w w w w w w"
+      },
+      {
+        "number": 14530,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13555-w-w-w",
+        "title": "ABV-13555: w w.w w 3 w 6: w w w w w w"
+      },
+      {
+        "number": 14495,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13815-w",
+        "title": "ABV-13815: w w/w/w/w.w"
+      },
+      {
+        "number": 14490,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13706-w-w-w-w2",
+        "title": "ABV-13706: w w, w w, w, w w-w w w w w w (w w2)"
+      },
+      {
+        "number": 14414,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13615-w-w-w",
+        "title": "ABV-13615: w w w"
+      },
+      {
+        "number": 14329,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13462-w-w-w-w",
+        "title": "ABV-13462: w w/w/w/w.w"
+      },
+      {
+        "number": 14285,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13164-w-w-w",
+        "title": "ABV-13164: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14493,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13788-w-w",
+        "title": "ABV-13788: w w/w/w/w.w"
+      },
+      {
+        "number": 14527,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13712-w-w-w",
+        "title": "ABV-13712: w w/w.w w w w w w"
+      },
+      {
+        "number": 14541,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13914-w-w-w-w",
+        "title": "ABV-13914: w w-w-w/w/w/w-w-w.w"
+      },
+      {
+        "number": 14507,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13792-w-w-w",
+        "title": "ABV-13792: w w/w/w/w-w.w"
+      },
+      {
+        "number": 14443,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13652-w-w-w-w",
+        "title": "ABV-13652: w w-w/w/w/w/w.w"
+      },
+      {
+        "number": 14417,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13518-w-w-w-w",
+        "title": "ABV-13518: w w w w"
+      },
+      {
+        "number": 14318,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13141-w-w-w",
+        "title": "ABV-13141: w w w"
+      },
+      {
+        "number": 14539,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13811-w",
+        "title": "ABV-13811: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14529,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13658-w-w-w",
+        "title": "ABV-13658: w w/w.w w w w w w"
+      },
+      {
+        "number": 14497,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13789-w-w-w",
+        "title": "ABV-13789: w w/w-w.w w w-w w w w (w w)"
+      },
+      {
+        "number": 14472,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13771-w-w-w",
+        "title": "ABV-13771: w w/w.w w 14 w-w (w w)"
+      },
+      {
+        "number": 14500,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13814-w",
+        "title": "ABV-13814: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14447,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13606-w-w",
+        "title": "ABV-13606: w w/w/w/w.w"
+      },
+      {
+        "number": 14518,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13860-w-w-w",
+        "title": "ABV-13860: w w/w/w/w.w"
+      },
+      {
+        "number": 14413,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13368-w-w-w",
+        "title": "ABV-13368: w w w w w w w w-w w; w w w / w"
+      },
+      {
+        "number": 14448,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13144-w-w-2",
+        "title": "ABV-13144 (2/w): w w/w/w.w"
+      },
+      {
+        "number": 14442,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13707-w-w-w",
+        "title": "ABV-13707: w w: w, w w w w"
+      },
+      {
+        "number": 14357,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13142-w-w",
+        "title": "ABV-13142: w w/w/w/w/w.w (1/3: w w w)"
+      },
+      {
+        "number": 14531,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13832-w-w-w-w-w-w",
+        "title": "ABV-13832: w w: w w w w w w w w w w"
+      },
+      {
+        "number": 14440,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13482-w-w",
+        "title": "ABV-13482: w w w w w w w w (w w w)"
+      },
+      {
+        "number": 14402,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13554-w-w-w",
+        "title": "ABV-13554: w w.w w 2 w 6: w w w w w w w w"
+      },
+      {
+        "number": 14453,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13498-w-w-w-w",
+        "title": "ABV-13498: w w w, w, w-w w w-w w w w w (w w1)"
+      },
+      {
+        "number": 14433,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13666-w-w-w",
+        "title": "ABV-13666: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14431,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13665-w-w-w-w",
+        "title": "ABV-13665: w w-w-w/w/w/w-w.w"
+      },
+      {
+        "number": 14239,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13140-w-w-w-w",
+        "title": "ABV-13140: w w w w"
+      },
+      {
+        "number": 14404,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13497-w-w-w-w",
+        "title": "ABV-13497: w w w w w w"
+      },
+      {
+        "number": 14370,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13148-w-w",
+        "title": "ABV-13148: w w-w-w/w/w/w/w.w"
+      },
+      {
+        "number": 14521,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13806-w-w-w",
+        "title": "ABV-13806: w w/w.w w w w w w-w"
+      },
+      {
+        "number": 14410,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13144-w-w",
+        "title": "ABV-13144 (1/w): w w/w/w.w"
+      },
+      {
+        "number": 14398,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13201-w-w-w",
+        "title": "ABV-13201: w w w w (w) w w, w"
+      },
+      {
+        "number": 14492,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13805-w-w-w",
+        "title": "ABV-13805: w w-w-w/w/w/w-w.w"
+      },
+      {
+        "number": 14362,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13143-w-w-w",
+        "title": "ABV-13143: w w/w/w/w.w"
+      },
+      {
+        "number": 14542,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13923-w-w",
+        "title": "ABV-13923: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14496,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13816-w-w-w",
+        "title": "ABV-13816: w w/w/w/w/w-w.w"
+      },
+      {
+        "number": 14461,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13710-w-w-w",
+        "title": "ABV-13710: w w: w/w/w/w/ w"
+      },
+      {
+        "number": 14366,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13529-w-w-w",
+        "title": "ABV-13529: w w/w/w/w/w/w.w"
+      },
+      {
+        "number": 14420,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13595-w-w-w",
+        "title": "ABV-13595: w w/w/w/w.w"
+      },
+      {
+        "number": 14540,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13823-w-w-w",
+        "title": "ABV-13823: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14313,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13338-w-w-w-w",
+        "title": "ABV-13338: w w/w/w/w.w"
+      },
+      {
+        "number": 14544,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13924-w-w-w",
+        "title": "ABV-13924: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14434,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13674-w-w-w-w-w",
+        "title": "ABV-13674: w w-w-w/w/w/w-w-w/w-w-w-w.w"
+      },
+      {
+        "number": 14534,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13895-w-w-w-w",
+        "title": "ABV-13895: w w/w/w/w/w/w.w"
+      },
+      {
+        "number": 14538,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13820-w-w-w",
+        "title": "ABV-13820: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14390,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13564-w-w-w",
+        "title": "ABV-13564: w w-w/w/w/w/w.w"
+      },
+      {
+        "number": 14513,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13859-w-w-w-w",
+        "title": "ABV-13859: w w-w-w/w/w/w-w-w/w-w-w.w"
+      },
+      {
+        "number": 14475,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13709-w-w-w",
+        "title": "ABV-13709: w w: w/w/w/w/ w"
+      },
+      {
+        "number": 14435,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13678-w-w-w-w",
+        "title": "ABV-13678: w w/w/w/w-w.w"
+      },
+      {
+        "number": 14528,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13772-w-w-w",
+        "title": "ABV-13772: w w w w w/w"
+      },
+      {
+        "number": 14331,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13481-w-w-w-w-w",
+        "title": "ABV-13481: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14464,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13716-w-w-w-w",
+        "title": "ABV-13716: w w/w/w/w-w.w"
+      },
+      {
+        "number": 14462,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13714-w-w",
+        "title": "ABV-13714: w w"
+      },
+      {
+        "number": 14432,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13646-w-w-w-w",
+        "title": "ABV-13646: w w/w/w/w.w"
+      },
+      {
+        "number": 14412,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13586-w-w-w-w",
+        "title": "ABV-13586: w w w w"
+      },
+      {
+        "number": 14409,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13584-w-w-w-w",
+        "title": "ABV-13584: w w/w/w/w.w"
+      },
+      {
+        "number": 14339,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13496-w-w-w-w-w",
+        "title": "ABV-13496: w w/w/w/w.w"
+      },
+      {
+        "number": 14520,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13718-w-w-w-w",
+        "title": "ABV-13718: w w w w -> w w w w w"
+      },
+      {
+        "number": 14248,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13146-w-w",
+        "title": "ABV-13146: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14256,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13149-w-w-w",
+        "title": "ABV-13149: w w/w.w"
+      },
+      {
+        "number": 14525,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13822-w-w-w-w-w",
+        "title": "ABV-13822: w w w-w: w w/w.w w, w w-w w w"
+      },
+      {
+        "number": 14489,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13759-w-w-w-w",
+        "title": "ABV-13759: w w/w/w/w.w"
+      },
+      {
+        "number": 14481,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13715-w-w-w",
+        "title": "ABV-13715: w w/w/w/w.w"
+      },
+      {
+        "number": 14436,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13681-w-w-w-w",
+        "title": "ABV-13681: w w-w/w/w/w/w.w"
+      },
+      {
+        "number": 14470,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13708-w-w-w-w",
+        "title": "ABV-13708: w w: w w w w"
+      },
+      {
+        "number": 14458,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13717-w-w",
+        "title": "ABV-13717: w w/w/w/w.w"
+      },
+      {
+        "number": 14499,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13831-w-w-w-w",
+        "title": "ABV-13831: w w/w/w/w/w.w"
+      },
+      {
+        "number": 14526,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13773-w-w-w",
+        "title": "ABV-13773: w w w w w # w w"
+      },
+      {
+        "number": 14308,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13327-w-w-w-w",
+        "title": "ABV-13327: w w/w/w/w-w.w"
+      },
+      {
+        "number": 14519,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13852-w-w-w",
+        "title": "ABV-13852: w w-w-w/w/w/w/w-w.w"
+      },
+      {
+        "number": 13137,
+        "state": "MERGED",
+        "headRefName": "dev/abv-11940-w10-w",
+        "title": "ABV-11940: w10 w: w w w w w w w w, w 80% w w w w"
+      },
+      {
+        "number": 14303,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13151-w-w-w-w",
+        "title": "ABV-13151: w w/w/w/w-w-w.w"
+      },
+      {
+        "number": 14498,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13824-w-w-w-w",
+        "title": "ABV-13824: w w/w/w/w-w-w.w"
+      },
+      {
+        "number": 14249,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13145-w-w-w",
+        "title": "ABV-13145: w w/w/w/w-w.w"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-12994",
+    "query": "quoted",
+    "linear": [14110],
+    "hits": [
+      {
+        "number": 14110,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12466-w-w-w",
+        "title": "ABV-12466: w w w w w w w w w w w w_w_w (w4w)"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-12614",
+    "query": "quoted",
+    "linear": [13808],
+    "hits": [
+      {
+        "number": 13808,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12593-w-w-w-w-129-w-w-w",
+        "title": "ABV-12593: w w w w w (w w, w w w, w w)"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-12279",
+    "query": "quoted",
+    "linear": [13535, 13744],
+    "hits": [
+      {
+        "number": 13535,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12278-w-w-w-w-w",
+        "title": "ABV-12278/12279: w w w w w w w w w w; w w w-"
+      },
+      {
+        "number": 13744,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12388-w-w-w",
+        "title": "ABV-12388: w w w w w w w w w w w w"
+      },
+      {
+        "number": 13762,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12631-w-w-w-w",
+        "title": "ABV-12631: w w- w w w w w w w w w w w w; w #6 w w w"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-12697",
+    "query": "quoted",
+    "linear": [14386, 14455],
+    "hits": [
+      {
+        "number": 14455,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12697-w-w-w-14386",
+        "title": "ABV-12697: [w w-w] w w w w w w; w w w w w w w (#14386)"
+      },
+      {
+        "number": 14386,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12697-w-w-w-w-w-w",
+        "title": "ABV-12697: w w w w w w w w; w w w w w w w"
+      },
+      {
+        "number": 8044,
+        "state": "MERGED",
+        "headRefName": "dev/abv-6673-w-w-w-w",
+        "title": "ABV-6673: w w w w w w w w w w-w w w w w"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-13107",
+    "query": "quoted",
+    "linear": [14281, 14288, 14422],
+    "hits": [
+      {
+        "number": 14281,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13107-w-w-w-w",
+        "title": "ABV-13107: w-w w w w w w w w w w (w w w 0.3 → 22 w)"
+      },
+      {
+        "number": 14422,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13107-w-w-w-14281-14288",
+        "title": "ABV-13107: [w w-w] w-w, w w w-w w w w w w w w w (#14281, #14288)"
+      },
+      {
+        "number": 14288,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13107-w-w-w-w",
+        "title": "ABV-13107: w w w w-w w w w w w w w w w (w w w 7.9 → 14.9+ w w 18.0 → 43.5+ w)"
+      },
+      {
+        "number": 14263,
+        "state": "OPEN",
+        "headRefName": "dev/abv-13163-w-w-w-w",
+        "title": "ABV-13163: w w/w/w/w.w"
+      },
+      {
+        "number": 14196,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13028-w-w-w-w",
+        "title": "ABV-13028: w w w w w, w w w w w w w w"
+      },
+      {
+        "number": 14214,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13116-w-w",
+        "title": "ABV-13116: w w w w w w w w w w w w w w w"
+      },
+      {
+        "number": 14249,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13145-w-w-w",
+        "title": "ABV-13145: w w/w/w/w-w.w"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-13509",
+    "query": "quoted",
+    "linear": [14340, 14346],
+    "hits": [
+      {
+        "number": 14340,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13509-w-w-w",
+        "title": "ABV-13509: w w w w w w w w"
+      },
+      {
+        "number": 14346,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13509-w-w-w-14340",
+        "title": "ABV-13509: [w w-w] w w w w w w w w (#14340)"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-13103",
+    "query": "quoted",
+    "linear": [14237, 14298, 14334, 14403],
+    "hits": [
+      {
+        "number": 14403,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13103-w-w-w",
+        "title": "ABV-13103: w w w w, w w w w w"
+      },
+      {
+        "number": 14298,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13103-w-w-w",
+        "title": "ABV-13103: w w w w w, w, w w w w w w"
+      },
+      {
+        "number": 14237,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13103-w-w-w-w",
+        "title": "ABV-13103: w w w w w w w w w w w2 w"
+      },
+      {
+        "number": 14334,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13103-w-w-w-14237",
+        "title": "ABV-13103: [w w-w] w w w w w w w w w w w2 w (#14237)"
+      },
+      {
+        "number": 14385,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13563-w-w-w-14216",
+        "title": "ABV-13563: [w w-w] w w w w-w w w w (#14216)"
+      },
+      {
+        "number": 14277,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12907-w-w-w-w2",
+        "title": "ABV-12907: w w w w w w w w w; w w w-w w w"
+      },
+      {
+        "number": 14549,
+        "state": "OPEN",
+        "headRefName": "dev/abv-12908-w-w-w-w",
+        "title": "ABV-12908: w w w w w w w w w (w2-1 w2)"
+      },
+      {
+        "number": 14546,
+        "state": "OPEN",
+        "headRefName": "dev/abv-12908-w-w-w",
+        "title": "ABV-12908: w w w w w w w w w w w (w2-1 w1)"
+      },
+      {
+        "number": 14509,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12908-w-w-w",
+        "title": "ABV-12908: w w w w w w (w2-1 w-w, w w)"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-13181",
+    "query": "quoted",
+    "linear": [14269, 14282],
+    "hits": [
+      {
+        "number": 14269,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13181-w-w-w",
+        "title": "ABV-13181: w w 2 w w w 3 4w w w w-w-1 w w w-w"
+      },
+      {
+        "number": 14282,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13181-w-w-w",
+        "title": "ABV-13181: [w] w w 2 w w w 3 4w w w w-w-1 w w w-w"
+      },
+      {
+        "number": 13294,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12017-w-w-w",
+        "title": "ABV-12017: w w w-w w w w — w-w w-w w"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-13153",
+    "query": "quoted",
+    "linear": [14226, 14234],
+    "hits": [
+      {
+        "number": 14226,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13153-w-w-w-w-w-w-w-w",
+        "title": "ABV-13153: w w w-w w'w w w $w"
+      },
+      {
+        "number": 14234,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13153-w-w-w-14226",
+        "title": "ABV-13153: [w w-w] w w w-w w'w w w $w (#14226)"
+      },
+      {
+        "number": 13734,
+        "state": "OPEN",
+        "headRefName": "dev/abv-12018-w-w-w-w",
+        "title": "ABV-12018: w w w w w-w w w (w w 22 w w)"
+      },
+      {
+        "number": 14183,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12222-w-w-w-w-w-w",
+        "title": "ABV-12222: w w w w w w w"
+      },
+      {
+        "number": 13265,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12106-w-w10-w",
+        "title": "ABV-12106: w w w w w w w-w w w"
+      },
+      {
+        "number": 13365,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12018-w-w-w-w-w-w",
+        "title": "ABV-12018: w w w w w w-w w"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-13068",
+    "query": "quoted",
+    "linear": [14153, 14182, 14246, 14270, 14286],
+    "hits": [
+      {
+        "number": 14182,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13068-w-w-w-w-w-w",
+        "title": "ABV-13068: w w w w w w-w w w w w w w w w"
+      },
+      {
+        "number": 14270,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13068-w-w-w-w-w",
+        "title": "ABV-13068: w w w w w w w w w w w w w w"
+      },
+      {
+        "number": 14286,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13068-w-w-w-14246-14270",
+        "title": "ABV-13068: [w w-w] w w: w w w w w, w w w w, w w w w w (#14246, #14270)"
+      },
+      {
+        "number": 14153,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13068-w-w-w-w-w",
+        "title": "ABV-13068: w w w w w w, w w w w, w w w; w w9 w w w9"
+      },
+      {
+        "number": 14246,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13068-w-w-w-w-w",
+        "title": "ABV-13068: w w'w w w w w w w w w w, w w w w, w w w w w w"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-13012",
+    "query": "quoted",
+    "linear": [14118, 14175],
+    "hits": [
+      {
+        "number": 14118,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13012-w-w-w-w-w-w",
+        "title": "ABV-13012: w w w w w w w w w w w"
+      },
+      {
+        "number": 14175,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13012-w-w-w-w",
+        "title": "ABV-13012: w w-w w w w w w w (w w-w)"
+      },
+      {
+        "number": 14140,
+        "state": "MERGED",
+        "headRefName": "dev/abv-13011-w-w-w-w-w-w-w",
+        "title": "ABV-13011: w w w w w w w w w w w"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-12997",
+    "query": "quoted",
+    "linear": [14114, 14125, 14191],
+    "hits": [
+      {
+        "number": 14191,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12997-w-w-w",
+        "title": "w w w (ABV-12997 w w-w)"
+      },
+      {
+        "number": 14125,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12997-w-w",
+        "title": "ABV-12997: w: w w w w'w w (w-w w #14114)"
+      },
+      {
+        "number": 14114,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12997-w-w-w-w-w-w",
+        "title": "ABV-12997: w w: w w w w'w w w w w w w w w w w"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-13945",
+    "query": "quoted",
+    "linear": [14561],
+    "hits": [
+      {
+        "number": 14561,
+        "state": "OPEN",
+        "headRefName": "dev/abv-13945-w-w-w-w-w",
+        "title": "ABV-13945: w w-w-w/w/w/w-w/w/w.w"
+      }
+    ]
+  },
+  {
+    "ticket": "ABV-13945",
+    "query": "plain",
+    "linear": [14561],
+    "hits": [
+      {
+        "number": 14561,
+        "state": "OPEN",
+        "headRefName": "dev/abv-13945-w-w-w-w-w",
+        "title": "ABV-13945: w w-w-w/w/w/w-w/w/w.w"
+      },
+      {
+        "number": 13945,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12799-w-w-w",
+        "title": "ABV-12799: w w w w w w w; w w w w w w w"
+      },
+      {
+        "number": 13989,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12872-w-w-w-w",
+        "title": "ABV-12872: w w w w w w w w w"
+      },
+      {
+        "number": 14086,
+        "state": "MERGED",
+        "headRefName": "dev/abv-12968-w-w-w-w-w-w",
+        "title": "ABV-12968: w w w w \"w w\", w w w w w, w w w w w w"
+      },
+      {
+        "number": 2646,
+        "state": "MERGED",
+        "headRefName": "dev/abv-1838-w-w-w",
+        "title": "ABV-1838: w \"w w\" w w w \"w w w\""
+      },
+      {
+        "number": 2647,
+        "state": "MERGED",
+        "headRefName": "dev/abv-1882-w-w-w-w-w",
+        "title": "ABV-1882: w w \"w-w w\" w w w w w"
+      },
+      {
+        "number": 2642,
+        "state": "MERGED",
+        "headRefName": "dev/abv-1852-w-w-w-w",
+        "title": "ABV-1852: w w w w w w_w_w_w"
+      },
+      {
+        "number": 2637,
+        "state": "MERGED",
+        "headRefName": "dev/abv-1851-w-w-w-w-w-w",
+        "title": "ABV-1851: w w w w w w"
+      },
+      {
+        "number": 2641,
+        "state": "MERGED",
+        "headRefName": "dev/abv-1872-w-w-w-w-w-w",
+        "title": "ABV-1872: w w w w w w(\"w\")"
+      },
+      {
+        "number": 2644,
+        "state": "MERGED",
+        "headRefName": "dev/abv-1875-w-w-w-w-w",
+        "title": "ABV-1875: w w w/w w w w w"
+      },
+      {
+        "number": 2638,
+        "state": "MERGED",
+        "headRefName": "dev/abv-1813-w-w-w",
+        "title": "ABV-1813: w w_w w + w w w w_w"
+      },
+      {
+        "number": 2645,
+        "state": "MERGED",
+        "headRefName": "dev/abv-1878-w-w-w",
+        "title": "ABV-1878: w w w w w w/w w"
+      }
+    ]
+  }
+]

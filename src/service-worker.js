@@ -15,7 +15,7 @@ import {
   applySettings,
   openAll,
   openOne,
-  openOneById,
+  openShortcut,
   onProgress,
   resolveShortcut,
   searchPullRequests,
@@ -56,11 +56,14 @@ async function handle(message, sender) {
     case 'settings':
       return applySettings(message.patch ?? {});
     case 'openShortcut':
-      return openOneById(message.prId, {
-        reuseAcrossWindows: true,
-        sourceTabId: sender?.tab?.id,
-        canContinue: sourceGuard(sender),
-      });
+      return openShortcut(
+        { prId: message.prId, outside: message.outside },
+        {
+          reuseAcrossWindows: true,
+          sourceTabId: sender?.tab?.id,
+          canContinue: sourceGuard(sender),
+        }
+      );
     case 'bridge':
       return bridgeStatus();
     case 'bridgeRetry':

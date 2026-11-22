@@ -7,6 +7,7 @@ import {
   openAll,
   openOne,
   resolveShortcut,
+  openShortcut,
   onProgress,
 } from '../src/app-state.js';
 import {
@@ -18,6 +19,7 @@ import {
   tick,
 } from './helpers/chrome.mjs';
 import { withSettingsLock } from '../src/store.js';
+import { lookupFetch } from './helpers/outside.mjs';
 const originalFetch = globalThis.fetch;
 after(() => {
   globalThis.fetch = originalFetch;
@@ -186,4 +188,126 @@ test('an unavailable fresh snapshot cannot authorize automatic shortcut navigati
   fakeChrome({ cache });
   const result = await resolveShortcut('ABC-123');
   assert.equal(result.stale, true);
+});
+
+/* ------------------------------------------- lookups outside my scopes -- */
+
+const fresh = () => fakeChrome({ cache: cached({ fetchedAt: Date.now() }) });
+
+test('a ticket outside my scopes resolves from GitHub and stores nothing', async () => {
+  const h = fresh(),
+    asked = [];
+  const before = JSON.stringify(h.store);
+  const stateBefore = JSON.stringify(await loadState());
+  globalThis.fetch = lookupFetch(asked);
+  const result = await resolveShortcut('ABV-13945');
+  assert.equal(asked.length, 1, 'the cache missed, so GitHub was asked once');
+  assert.equal(asked[0].variables.q, 'repo:Above-Security/above is:pr "ABV-13945"');
+  assert.equal(result.status, 'one');
+  assert.deepEqual(
+    result.matches.map((pr) => pr.number),
+    [14561]
+  );
+  assert.equal(result.outside.complete, true);
+  assert.equal(JSON.stringify(h.store), before);
+  assert.equal(JSON.stringify(await loadState()), stateBefore);
+});
+
+test('a bare number outside my scopes is one exact lookup', async () => {
+  fresh();
+  const asked = [];
+  globalThis.fetch = lookupFetch(asked);
+  const result = await resolveShortcut('14561');
+  assert.equal(asked.length, 1);
+  assert.match(asked[0].query, /repository\(owner: \$owner, name: \$name\)/);
+  assert.deepEqual(asked[0].variables, { owner: 'Above-Security', name: 'above', number: 14561 });
+  assert.equal(result.status, 'one');
+  assert.equal(result.matches[0].url, 'https://github.com/Above-Security/above/pull/14561');
+});
+
+test('a number GitHub does not know is a miss, not an error', async () => {
+  fresh();
+  globalThis.fetch = lookupFetch();
+  const result = await resolveShortcut('99999999');
+  assert.equal(result.status, 'none');
+  assert.equal(result.lookup, undefined);
+});
+
+test('two pull requests for one ticket go to the chooser', async () => {
+  fresh();
+  globalThis.fetch = lookupFetch();
+  const result = await resolveShortcut('ABV-13001');
+  assert.equal(result.status, 'many');
+  assert.deepEqual(result.matches.map((pr) => pr.number).sort(), [14144, 14231]);
+});
+
+test('a hit in my own scopes never asks GitHub', async () => {
+  const h = fresh();
+  const result = await resolveShortcut('ABC-123');
+  assert.equal(result.status, 'one');
+  assert.equal(h.calls.fetches, 0);
+});
+
+test('under 100 points the lookup refuses, says why, and leaves the cooldown alone', async () => {
+  const cache = cached({ fetchedAt: Date.now() });
+  cache.rateLimit.remaining = 99;
+  const h = fakeChrome({ cache, nextFetchAt: 7 });
+  const before = JSON.stringify(h.store);
+  const result = await resolveShortcut('ABV-13945');
+  assert.equal(h.calls.fetches, 0);
+  assert.equal(result.status, 'none');
+  assert.match(result.lookup.message, /99 .*points/);
+  assert.equal(JSON.stringify(h.store), before);
+});
+
+test('the budget check does not wait out the refresh cooldown', async () => {
+  // mayFetchNow says no for 4 seconds after any refresh; only its budget rule applies here.
+  const cache = cached({ fetchedAt: Date.now() });
+  cache.rateLimit.remaining = 400;
+  fakeChrome({ cache });
+  globalThis.fetch = lookupFetch();
+  assert.equal((await resolveShortcut('ABV-13945')).status, 'one');
+});
+
+test('a failed lookup says why and writes nothing', async () => {
+  for (const reply of [
+    async () => {
+      throw TypeError('offline');
+    },
+    async () =>
+      new Response(JSON.stringify({ errors: [{ type: 'RATE_LIMITED', message: 'limit' }] }), {
+        headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '9999999999' },
+      }),
+  ]) {
+    const h = fresh();
+    const before = JSON.stringify(h.store);
+    globalThis.fetch = reply;
+    const result = await resolveShortcut('ABV-13945');
+    assert.equal(result.status, 'none');
+    assert.ok(result.lookup.message);
+    assert.equal(JSON.stringify(h.store), before);
+  }
+});
+
+test('an outside pull request opens by identity and is never stored', async () => {
+  const h = fresh();
+  const before = JSON.stringify(h.store.cache);
+  const result = await openShortcut({
+    prId: 'PR_14561',
+    outside: { repo: 'Above-Security/above', number: 14561 },
+  });
+  assert.equal(result.opened.length, 1);
+  assert.equal(h.calls.created[0].url, 'https://github.com/Above-Security/above/pull/14561');
+  assert.equal(JSON.stringify(h.store.cache), before);
+});
+
+test('an outside open only builds github.com pull request URLs', async () => {
+  fresh();
+  for (const outside of [
+    { repo: 'evil.test/../x', number: 1 },
+    { repo: 'a/b', number: -1 },
+    { repo: 'a/b', number: '1' },
+    { repo: 'a', number: 1 },
+  ])
+    await assert.rejects(openShortcut({ prId: 'x', outside }), /No valid pull request/);
 });
