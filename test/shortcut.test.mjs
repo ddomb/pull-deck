@@ -36,6 +36,31 @@ test('an older document or pending new navigation cannot own a shortcut action',
   h.tabs[0].pendingUrl = 'https://example.test/';
   assert.equal(await guard(), false);
   delete h.tabs[0].pendingUrl;
-  chrome.webNavigation.getFrame = async () => ({ documentId: 'doc2' });
-  assert.equal(await guard(), false);
+  chrome.runtime.getContexts = async () => [];
+  assert.equal(await guard(), false, 'the document that asked is gone');
+});
+
+test('the resolver page that asked can own its shortcut action', async () => {
+  // Chrome's webNavigation API never reports chrome-extension:// frames, so the
+  // check has to come from the extension's own contexts instead.
+  const h = fakeChrome();
+  const url = chrome.runtime.getURL('src/resolve.html') + '?shortcut=http://pull-dock/14561';
+  h.tabs.push({ id: 1, url });
+  const asked = [];
+  chrome.runtime.getContexts = async (filter) => {
+    asked.push(filter);
+    return [{ contextType: 'TAB', documentId: 'doc1', tabId: 1, frameId: 0, documentUrl: url }];
+  };
+  assert.equal(await sourceGuard({ tab: { id: 1 }, url, documentId: 'doc1' })(), true);
+  assert.deepEqual(asked, [{ documentIds: ['doc1'] }]);
+  for (const other of [{ tabId: 2 }, { frameId: 3 }, { documentUrl: `${url}x` }]) {
+    chrome.runtime.getContexts = async () => [
+      { contextType: 'TAB', documentId: 'doc1', tabId: 1, frameId: 0, documentUrl: url, ...other },
+    ];
+    assert.equal(
+      await sourceGuard({ tab: { id: 1 }, url, documentId: 'doc1' })(),
+      false,
+      JSON.stringify(other)
+    );
+  }
 });
