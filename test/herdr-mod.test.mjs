@@ -13,6 +13,10 @@ const { toSnapshot, toFound } = await import('../claude-mod/herdr/model.js');
 const { curlArgs, fromCurl } = await import('../claude-mod/herdr/relay.js');
 const { live, fifty } = await import('../claude-mod/tests/herdr-fixtures.js');
 
+const { loadState, resolveShortcut, searchPullRequests } = await import('../src/app-state.js');
+const { fakeChrome, cached } = await import('./helpers/chrome.mjs');
+const { lookupFetch } = await import('./helpers/outside.mjs');
+
 const cx = { focus_handle: () => ({ is_focused: () => false, focus() {} }), notify() {} };
 
 /** The mod as Herdr would hold it after the relay answered `reply` and, optionally, a search. */
@@ -114,4 +118,37 @@ test('curl results become the relay status the model reads', () => {
     'http://pull-deck/search',
   ]);
   assert.ok(args.includes('--unix-socket') && args.includes('/s.sock'));
+});
+
+test('a lookup outside my scopes leaves every Herdr row and search as it was', async () => {
+  const h = fakeChrome({ cache: cached({ fetchedAt: Date.now() }) });
+  const reply = async () => ({
+    state: { app: true, state: await loadState(), error: null },
+    replies: await Promise.all(
+      ['ABV-13945', '14561'].map(async (query) => {
+        const found = await searchPullRequests(query);
+        return {
+          query,
+          data: { status: found.status, prIds: found.matches.map((pr) => pr.id), stale: false },
+        };
+      })
+    ),
+  });
+  const drawn = (r) =>
+    JSON.stringify([
+      ...['mine', 'reviewing', 'assigned'].map((scope) => draw(r, { scope })),
+      ...r.replies.map(({ query }) => draw(r, { query })),
+    ]);
+
+  const before = await reply();
+  globalThis.fetch = lookupFetch();
+  assert.equal((await resolveShortcut('ABV-13945')).matches[0].number, 14561);
+  assert.equal((await resolveShortcut('14561')).matches[0].number, 14561);
+  const after = await reply();
+  assert.equal(h.calls.fetches, 0, 'only the lookups went out');
+  assert.deepEqual(after, before);
+  assert.equal(drawn(after), drawn(before));
+  assert.ok(
+    texts(draw(after, { query: 'ABV-13945' })).some((t) => t.startsWith('Not in your snapshot'))
+  );
 });

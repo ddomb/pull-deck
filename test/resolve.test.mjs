@@ -7,7 +7,15 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseShortcut, findMatches, containsToken, SHORTCUT_HOSTS } from '../src/resolve.js';
+import {
+  parseShortcut,
+  findMatches,
+  containsToken,
+  outsideQuery,
+  ticketHits,
+  SHORTCUT_HOSTS,
+} from '../src/resolve.js';
+import { outsideCase, outsideCases } from './helpers/outside.mjs';
 
 const pr = (over = {}) => ({
   id: over.id ?? `id-${over.number ?? 1}`,
@@ -230,4 +238,64 @@ test('junk input is a miss, not a crash', () => {
   }
   assert.equal(findMatches('   ', LIST).status, 'empty');
   assert.equal(findMatches(undefined, null).status, 'empty');
+});
+
+/* ------------------------------------------- lookups outside my scopes -- */
+
+test('a ticket lookup drops the 11 noise hits GitHub returns for ABV-13945', () => {
+  // The unquoted search, the noisiest form: PR #13945 is a hit because of its
+  // number, the rest for words in their bodies. Only #14561 carries the ticket.
+  const { hits } = outsideCase('ABV-13945', 'plain');
+  assert.equal(hits.length, 12);
+  assert.ok(hits.some((hit) => hit.number === 13945));
+  assert.deepEqual(
+    ticketHits('ABV-13945', hits).map((hit) => hit.number),
+    [14561]
+  );
+});
+
+test('every recorded ticket keeps only pull requests Linear links to it', () => {
+  for (const { ticket, linear, hits } of outsideCases) {
+    const kept = ticketHits(ticket, hits).map((hit) => hit.number);
+    assert.deepEqual(
+      kept.filter((n) => !linear.includes(n)),
+      [],
+      `${ticket}: a kept PR belongs to another ticket`
+    );
+  }
+  const two = outsideCase('ABV-13068');
+  assert.equal(ticketHits(two.ticket, two.hits).length, 5, 'ties all stay, for the chooser');
+});
+
+test('a bare number is an exact lookup in Above-Security/above', () => {
+  const exact = { kind: 'number', owner: 'Above-Security', name: 'above', number: 14561 };
+  assert.deepEqual(outsideQuery('14561'), exact);
+  assert.deepEqual(outsideQuery('#14561'), exact);
+});
+
+test('repo/N and owner/repo/N keep naming their repository', () => {
+  assert.deepEqual(outsideQuery('above/14561'), {
+    kind: 'number',
+    owner: 'Above-Security',
+    name: 'above',
+    number: 14561,
+  });
+  assert.deepEqual(outsideQuery('acme/api/4120'), {
+    kind: 'number',
+    owner: 'acme',
+    name: 'api',
+    number: 4120,
+  });
+  assert.deepEqual(outsideQuery('acme/api#4120'), outsideQuery('acme/api/4120'));
+  assert.equal(outsideQuery('a/b/c/4120'), null, 'not a repository name');
+});
+
+test('a ticket is searched as one quoted, upper-case token', () => {
+  for (const typed of ['ABV-13945', 'abv-13945', 'abv13945'])
+    assert.deepEqual(outsideQuery(typed), { kind: 'ticket', ticket: 'ABV-13945' }, typed);
+});
+
+test('words, branches and empty queries never go to GitHub', () => {
+  for (const typed of ['', 'session refresher', 'feat/abv-4242-sso', 'abv-', '0'])
+    assert.equal(outsideQuery(typed), null, typed);
 });

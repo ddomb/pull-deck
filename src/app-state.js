@@ -2,8 +2,15 @@ import { mergeScopes } from './github.js';
 import { openIntoGroup, readGroupState, tabUrl } from './tab-group.js';
 import { readSettings, writeSettings, withSettingsLock, GROUP_COLORS } from './store.js';
 import { pullRequestKey } from './pr-url.js';
-import { findMatches, searchMatches } from './resolve.js';
-import { refreshSnapshot, connectAccount, forgetAccount, authEpoch, isStale } from './refresh.js';
+import { findMatches, searchMatches, outsideQuery, ticketHits } from './resolve.js';
+import {
+  refreshSnapshot,
+  connectAccount,
+  forgetAccount,
+  authEpoch,
+  isStale,
+  lookupOutside,
+} from './refresh.js';
 import { refreshBadge } from './badge.js';
 export { LIVE_INTERVAL_MS, mayFetchNow } from './refresh.js';
 export { refreshBadge } from './badge.js';
@@ -231,14 +238,72 @@ export async function openOneById(id, options = {}) {
   return openOne(found, options);
 }
 
-/** The shortcut URL: strict, because one match opens on its own. */
-export const resolveShortcut = (query) => matchSnapshot(query, findMatches);
+/**
+ * The shortcut URL: strict, because one match opens on its own.
+ *
+ * My scopes come first. Only when they have nothing does GitHub get asked, for
+ * one number or one ticket. Those hits ride back in this reply and nowhere
+ * else: they never join the snapshot that the popup, the menu bar app and the
+ * mods draw.
+ *
+ * Speed: a PR number names one PR however old the list is, so a number in my
+ * scopes opens without waiting for a refresh. A ticket still waits, because an
+ * old list could miss its second PR. When the current list has nothing, the
+ * GitHub lookup runs alongside that refresh rather than after it.
+ */
+export async function resolveShortcut(query) {
+  const lookup = outsideQuery(query);
+  let early = null;
+  if (lookup) {
+    const now = await matchSnapshot(query, findMatches, { refresh: false });
+    if (lookup.kind === 'number' && (now.status === 'one' || now.status === 'many'))
+      return { ...now, stale: false };
+    if (now.status === 'none') early = lookupOutside(lookup);
+  }
+  const result = await matchSnapshot(query, findMatches);
+  if (!lookup || result.status !== 'none') return result;
+  const found = await (early ?? lookupOutside(lookup));
+  if (found.problem) return { ...result, lookup: found.problem };
+  const matches = (
+    lookup.kind === 'ticket' ? ticketHits(lookup.ticket, found.pullRequests) : found.pullRequests
+  ).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  if (matches.length === 0) return result;
+  return {
+    ...result,
+    status: matches.length === 1 ? 'one' : 'many',
+    matches,
+    // A capped search may be missing a hit, so it must not open on its own.
+    outside: { complete: found.complete },
+  };
+}
+
+/**
+ * The shortcut page's open. A pull request outside my scopes comes as its
+ * repository and number, and the URL is built here: the page never supplies
+ * one, and the pull request is not looked up in or written to the cache.
+ */
+export function openShortcut({ prId, outside }, options = {}) {
+  if (!outside) return openOneById(prId, options);
+  const parts = String(outside.repo ?? '').split('/');
+  const lookup =
+    parts.length === 2 && typeof outside.number === 'number'
+      ? outsideQuery(`${parts[0]}/${parts[1]}/${outside.number}`)
+      : null;
+  if (lookup?.kind !== 'number') return Promise.reject(Error('No valid pull request given.'));
+  return openOne(
+    {
+      id: String(prId),
+      url: `https://github.com/${lookup.owner}/${lookup.name}/pull/${lookup.number}`,
+    },
+    options
+  );
+}
 
 /** The search box (popup, menu bar app, Claude mod): ranked, it only lists. */
 export const searchPullRequests = (query) => matchSnapshot(query, searchMatches);
 
-async function matchSnapshot(query, match) {
-  const state = await loadState({ branches: true });
+async function matchSnapshot(query, match, { refresh = true } = {}) {
+  const state = refresh ? await loadState({ branches: true }) : await stateFrom();
   if (state.stage === 'onboarding') return { query, status: 'noToken', matches: [], all: [] };
   if (state.stage === 'error')
     return { query, status: 'error', error: state.error, matches: [], all: [] };

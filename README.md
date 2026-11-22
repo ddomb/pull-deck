@@ -6,7 +6,7 @@ See your open GitHub pull requests and put them in one browser tab group.
 
 ## Install the extension
 
-No build step or npm install is needed to load the extension. Requires Chrome 111+ or a compatible Chromium browser, including Edge and Brave.
+No build step or npm install is needed to load the extension. Requires Chrome 116+ or a compatible Chromium browser, including Edge and Brave.
 
 1. Download and extract the repository, or clone it using the repository's clone URL.
 2. Open `chrome://extensions` (`edge://extensions` or `brave://extensions` in those browsers).
@@ -170,7 +170,6 @@ Key commands for `keys.json` or `herdr-app do`: `pull-deck.focus`, `pull-deck.op
 | `storage` | Store the token, settings, cache, and cooldown state |
 | `alarms` | Background refresh and companion reconnect |
 | `nativeMessaging` | Connect to the optional native relay |
-| `webNavigation` | Verify the originating document still owns a shortcut action |
 | `declarativeNetRequestWithHostAccess` | Redirect shortcut requests before HTTP delivery |
 | `https://api.github.com/*` | Read GitHub GraphQL data |
 | HTTP(S) shortcut hosts | Permit redirects for the eight exact shortcut hostnames |

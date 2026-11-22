@@ -28,6 +28,10 @@ const state = {
   opening: false,
   status: 'loading',
   stale: false,
+  /** Whether what is on screen now may be incomplete: the cache, or a capped GitHub search. */
+  shownStale: false,
+  /** GitHub's answer for pull requests outside my scopes, kept only on this page. */
+  outside: null,
   active: true,
 };
 
@@ -115,6 +119,7 @@ function say(title, ...subParts) {
 
 function render(result) {
   state.status = result.status;
+  state.shownStale = result.outside ? !result.outside.complete : state.stale;
   dom.sheet.dataset.state = result.status;
   clearNotice();
 
@@ -149,7 +154,7 @@ function render(result) {
     case 'one':
       say('One match for ', quoted(query));
       renderRows(result.matches);
-      dom.foot.textContent = state.stale
+      dom.foot.textContent = state.shownStale
         ? 'This list may be out of date. Select a pull request to open it.'
         : 'Press ↵ to open it.';
       return;
@@ -184,9 +189,14 @@ async function open(pr) {
   try {
     const self = await chrome.tabs.getCurrent();
     if (!state.active) return;
+    // Outside my scopes the worker has no copy of it, so it gets the identity to build the URL from.
+    const outside = state.all.some((mine) => mine.id === pr.id)
+      ? undefined
+      : { repo: pr.repo, number: pr.number };
     const reply = await chrome.runtime.sendMessage({
       type: 'openShortcut',
       prId: pr.id,
+      outside,
     });
     if (!state.active) return;
     if (!reply?.ok) throw reply?.error ?? new Error('The extension worker did not respond.');
@@ -206,6 +216,8 @@ async function open(pr) {
 /** Re-filter locally. The full list is already here, so this costs nothing. */
 function filter(query) {
   const trimmed = query.trim();
+  // Back to the original shorthand: GitHub's answer for it still stands.
+  if (state.outside && trimmed === state.outside.query) return render(state.outside);
   const result = trimmed
     ? { query: trimmed, ...findMatches(trimmed, state.all) }
     : { query: '', status: 'empty', matches: [], all: state.all };
@@ -238,7 +250,8 @@ function wire() {
       filter(dom.input.value);
       // Enter only commits when there is exactly one answer. With several on
       // screen it would be a coin toss dressed up as a shortcut.
-      if (state.status === 'one' && !state.stale && state.rows.length === 1) state.rows[0].click();
+      if (state.status === 'one' && !state.shownStale && state.rows.length === 1)
+        state.rows[0].click();
       else if (state.rows.length > 1) state.rows[0].focus();
       return;
     }
@@ -281,16 +294,21 @@ async function start() {
 
   state.all = result.all ?? [];
   state.stale = Boolean(result.stale) || Object.values(result.truncated ?? {}).some(Boolean);
+  if (result.outside) state.outside = result;
   render(result);
-  if (state.stale)
+  if (state.shownStale)
     showNotice(
       'neutral',
       'List may be incomplete',
       result.error?.message ??
-        'The cached list is old or limited to 50 results per scope. Select a result explicitly or refresh in the popup.'
+        (result.outside
+          ? 'GitHub found more than 100 pull requests for this. Select a result explicitly.'
+          : 'The cached list is old or limited to 50 results per scope. Select a result explicitly or refresh in the popup.')
     );
+  if (result.lookup)
+    showNotice('neutral', 'Only your own pull requests were searched', result.lookup.message);
 
-  if (shortcut && result.status === 'one' && !state.stale && state.active) {
+  if (shortcut && result.status === 'one' && !state.shownStale && state.active) {
     await open(result.matches[0]);
     return;
   }

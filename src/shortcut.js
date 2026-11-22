@@ -25,8 +25,12 @@ export function sourceGuard(sender) {
       const tab = await chrome.tabs.get(tabId);
       if (tab.url !== expectedURL || (tab.pendingUrl && tab.pendingUrl !== expectedURL))
         return false;
-      const frame = await chrome.webNavigation.getFrame({ tabId, frameId: 0 });
-      return frame?.documentId === documentId;
+      // Not webNavigation.getFrame: Chrome never reports chrome-extension://
+      // frames there, so it answered null and cancelled every shortcut open.
+      const [context] = await chrome.runtime.getContexts({ documentIds: [documentId] });
+      return (
+        context?.tabId === tabId && context.frameId === 0 && context.documentUrl === expectedURL
+      );
     } catch {
       return false;
     }

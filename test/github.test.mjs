@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchPullRequests } from '../src/github.js';
+import { fetchPullRequests, lookupPullRequests } from '../src/github.js';
 import { githubResponse } from './helpers/chrome.mjs';
 const originalFetch = globalThis.fetch;
 after(() => {
@@ -61,4 +61,20 @@ test('scope truncation is retained for users and shortcut confidence', async () 
     githubResponse('user', { mine: { nodes: [], pageInfo: { hasNextPage: true } } });
   const result = await fetchPullRequests('mock');
   assert.equal(result.truncated.mine, true);
+});
+
+test('a lookup GitHub cannot resolve is an empty answer, not an error', async () => {
+  globalThis.fetch = async () =>
+    Response.json({
+      data: { repository: null },
+      errors: [{ type: 'NOT_FOUND', path: ['repository'], message: 'No such repository' }],
+    });
+  const lookup = { kind: 'number', owner: 'Above-Security', name: 'nope', number: 1 };
+  assert.deepEqual(await lookupPullRequests('mock', lookup), { pullRequests: [], complete: true });
+});
+test('a ticket search with more than 100 hits is marked incomplete', async () => {
+  globalThis.fetch = async () =>
+    Response.json({ data: { search: { pageInfo: { hasNextPage: true }, nodes: [] } } });
+  const found = await lookupPullRequests('mock', { kind: 'ticket', ticket: 'ABV-1' });
+  assert.equal(found.complete, false);
 });

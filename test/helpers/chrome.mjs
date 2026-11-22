@@ -145,6 +145,19 @@ export function fakeChrome(overrides = {}) {
       onStartup: event('startup'),
       sendMessage: async () => {},
       getURL: (p) => `chrome-extension://test/${p}`,
+      // The resolver tab's document, as Chrome lists the extension's own pages.
+      getContexts: async ({ documentIds }) => {
+        const tab = tabs.find((t) => String(t.url ?? '').includes('/src/resolve.html'));
+        return tab
+          ? documentIds.map((documentId) => ({
+              contextType: 'TAB',
+              documentId,
+              tabId: tab.id,
+              frameId: 0,
+              documentUrl: tab.url,
+            }))
+          : [];
+      },
       connectNative: () => ({
         onMessage: event('nativeMessage'),
         onDisconnect: event('nativeDisconnect'),
@@ -153,10 +166,6 @@ export function fakeChrome(overrides = {}) {
       }),
     },
     alarms: { create: async () => {}, clear: async () => {}, onAlarm: event('alarm') },
-    webNavigation: {
-      onBeforeNavigate: event('navigate'),
-      getFrame: async () => ({ documentId: 'doc1' }),
-    },
   };
   globalThis.fetch = async () => {
     calls.fetches++;

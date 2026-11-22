@@ -276,3 +276,59 @@ export function searchMatches(query, pullRequests) {
   const status = matches.length === 0 ? 'none' : matches.length === 1 ? 'one' : 'many';
   return { status, matches, all };
 }
+
+/* ----------------------------------------------- outside my own scopes -- */
+
+/** Where a bare number or "repo/N" points when the cache has no match. */
+export const DEFAULT_REPO = { owner: 'Above-Security', name: 'above' };
+
+const REPO_PART = /^(?!\.{1,2}$)[a-z0-9_.-]+$/i;
+
+/**
+ * What to ask GitHub when nothing in my scopes matched, or null to ask nothing.
+ *
+ * Only shapes that name one pull request or one ticket qualify. A word or a
+ * branch name would turn GitHub's full-text search loose, and its loose hits
+ * are exactly the wrong-hit risk this file exists to avoid.
+ *
+ * @param {string} query
+ * @returns {{kind: 'number', owner: string, name: string, number: number}
+ *   | {kind: 'ticket', ticket: string} | null}
+ */
+export function outsideQuery(query) {
+  const q = String(query ?? '').trim();
+  const bare = q.replace(/^#/, '');
+  if (/^\d+$/.test(bare)) return numbered(DEFAULT_REPO.owner, DEFAULT_REPO.name, bare);
+
+  const ref = splitRepoNumber(q);
+  if (ref) {
+    const parts = ref.repo.split('/');
+    if (parts.length === 1) return numbered(DEFAULT_REPO.owner, parts[0], ref.number);
+    if (parts.length === 2) return numbered(parts[0], parts[1], ref.number);
+    return null;
+  }
+
+  // "abv13945" is how a ticket gets typed in a hurry, as in findMatches.
+  const ticket = q.replace(/^([a-z]+)(\d+)$/i, '$1-$2');
+  if (/^[a-z][a-z0-9]*-\d+$/i.test(ticket)) return { kind: 'ticket', ticket: ticket.toUpperCase() };
+  return null;
+}
+
+function numbered(owner, name, number) {
+  const n = Number(number);
+  if (!Number.isSafeInteger(n) || n < 1 || !REPO_PART.test(owner) || !REPO_PART.test(name))
+    return null;
+  return { kind: 'number', owner, name, number: n };
+}
+
+/**
+ * The search hits that really carry this ticket, as a whole token in the
+ * branch or the title. GitHub matches the ticket anywhere, bodies included, so
+ * a PR that only mentions it, or whose number is the ticket's digits, comes
+ * back too. Every survivor is kept: a tie goes to the chooser.
+ */
+export function ticketHits(ticket, pullRequests) {
+  return pullRequests.filter(
+    (pr) => containsToken(pr.headRefName, ticket) || containsToken(pr.title, ticket)
+  );
+}

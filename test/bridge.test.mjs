@@ -5,6 +5,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BRIDGE_PROTOCOL_VERSION } from '../src/bridge-protocol.js';
+import { resolveShortcut } from '../src/app-state.js';
+import { fakeChrome as appChrome, cached, tick } from './helpers/chrome.mjs';
+import { lookupFetch } from './helpers/outside.mjs';
 
 let instance = 0;
 /** Fresh module instance per test — bridge.js holds module-level port state. */
@@ -477,4 +480,46 @@ test('losing a live connection reconnects at once, not on an alarm', async () =>
 
   assert.equal(h.calls.connects, 2);
   assert.equal(h.calls.alarms.length, 0);
+});
+
+test('a lookup outside my scopes changes no bridge message', async () => {
+  // The real app-state behind the bridge, with a signed-in account and a fresh cache.
+  const h = appChrome({ cache: cached({ fetchedAt: Date.now() }) });
+  const bridge = await freshBridge();
+  bridge.ensureBridge();
+  await h.listeners.nativeMessage.at(-1)({
+    type: 'hello',
+    version: BRIDGE_PROTOCOL_VERSION,
+    accepted: true,
+  });
+  await tick();
+  const send = h.listeners.nativeMessage.at(-1);
+  const exchange = async () => {
+    h.calls.posted.length = 0;
+    for (const command of [
+      { id: 1, type: 'getState' },
+      { id: 2, type: 'search', query: 'ABV-13945' },
+      { id: 3, type: 'search', query: '14561' },
+    ]) {
+      await send(command);
+      await tick();
+    }
+    return JSON.stringify(h.calls.posted);
+  };
+
+  const stored = JSON.stringify(h.store);
+  const before = await exchange();
+  const asked = [];
+  globalThis.fetch = lookupFetch(asked);
+  const ticket = await resolveShortcut('ABV-13945');
+  const number = await resolveShortcut('14561');
+  assert.equal(asked.length, 2, 'both lookups reached GitHub');
+  assert.deepEqual(
+    [ticket.matches[0]?.number, number.matches[0]?.number],
+    [14561, 14561],
+    'and found the pull request'
+  );
+  assert.equal(await exchange(), before);
+  assert.equal(JSON.stringify(h.store), stored);
+  assert.match(before, /"prIds":\[\]/, 'the search box still does not list it');
 });

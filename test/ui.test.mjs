@@ -7,7 +7,7 @@ import { mergeScopes } from '../src/github.js';
 import { cached, fakeChrome, pullRequest, tick } from './helpers/chrome.mjs';
 
 let instance = 0;
-async function mount(name, query = '', prs = null) {
+async function mount(name, query = '', prs = null, resolve = null) {
   const h = fakeChrome();
   const page = new JSDOM(readFileSync(new URL(`../src/${name}.html`, import.meta.url), 'utf8'), {
     url: `https://example.test/src/${name}.html${query}`,
@@ -51,6 +51,7 @@ async function mount(name, query = '', prs = null) {
           stale: options.stale,
         },
       };
+    if (message.type === 'resolve' && resolve) return { ok: true, data: resolve(message.query) };
     if (message.type === 'resolve')
       return {
         ok: true,
@@ -302,6 +303,102 @@ test('arrow keys move between the box and result rows; ⌘Enter still opens the 
     await tick();
     const openAll = h.sent.find((m) => m.type === 'openAll');
     assert.deepEqual(openAll.pullRequests.map((pr) => pr.id).sort(), ['pr-a', 'pr-d', 'pr-z']);
+  } finally {
+    h.close();
+  }
+});
+
+/* ------------------------------------------- lookups outside my scopes -- */
+
+const outsidePr = (number) =>
+  pullRequest({
+    id: `PR_${number}`,
+    number,
+    title: `ABV-13001: change ${number}`,
+    url: `https://github.com/Above-Security/above/pull/${number}`,
+    repo: 'Above-Security/above',
+    headRefName: 'dev/abv-13001-change',
+  });
+const outsideReply =
+  (matches, extra = {}) =>
+  (query) => ({
+    query,
+    status: matches.length === 1 ? 'one' : 'many',
+    matches,
+    all: [pullRequest()],
+    stale: true,
+    truncated: { mine: true },
+    outside: { complete: true },
+    ...extra,
+  });
+
+test('one pull request outside my scopes opens on its own, by identity', async () => {
+  // The cache is stale and truncated; GitHub's exact answer is not, so it still opens.
+  const h = await mount(
+    'resolve',
+    '?shortcut=http://pull-dock/14561',
+    null,
+    outsideReply([outsidePr(14561)])
+  );
+  try {
+    await tick();
+    const open = h.sent.find((m) => m.type === 'openShortcut');
+    assert.deepEqual(open, {
+      type: 'openShortcut',
+      prId: 'PR_14561',
+      outside: { repo: 'Above-Security/above', number: 14561 },
+    });
+  } finally {
+    h.close();
+  }
+});
+
+test('a capped GitHub search does not open on its own', async () => {
+  const reply = outsideReply([outsidePr(14561)], { outside: { complete: false } });
+  const h = await mount('resolve', '?shortcut=http://pull-dock/ABV-13945', null, reply);
+  try {
+    await tick();
+    assert.equal(h.sent.filter((m) => m.type === 'openShortcut').length, 0);
+  } finally {
+    h.close();
+  }
+});
+
+test('two pull requests outside my scopes stay in the chooser through Enter', async () => {
+  const h = await mount(
+    'resolve',
+    '?q=ABV-13001',
+    null,
+    outsideReply([outsidePr(14231), outsidePr(14144)])
+  );
+  try {
+    await tick();
+    assert.equal(h.sent.filter((m) => m.type === 'openShortcut').length, 0, 'a tie never opens');
+    h.key(h.document.querySelector('#query'), 'Enter');
+    await tick();
+    const rows = [...h.document.querySelectorAll('.pr-row')].map((row) => row.dataset.id);
+    assert.deepEqual(rows, ['PR_14231', 'PR_14144']);
+    h.document.querySelectorAll('.pr-row')[1].click();
+    await tick();
+    assert.deepEqual(h.sent.find((m) => m.type === 'openShortcut').outside, {
+      repo: 'Above-Security/above',
+      number: 14144,
+    });
+  } finally {
+    h.close();
+  }
+});
+
+test('a refused lookup says why', async () => {
+  const reply = (query) => ({
+    query,
+    ...findMatches(query, [pullRequest()]),
+    lookup: { kind: 'rateLimited', message: 'GitHub has 99 of its hourly points left.' },
+  });
+  const h = await mount('resolve', '?q=ABV-13945', null, reply);
+  try {
+    assert.match(h.document.querySelector('#notice').textContent, /99 of its hourly points/);
+    assert.equal(h.document.querySelector('#notice').hidden, false);
   } finally {
     h.close();
   }
