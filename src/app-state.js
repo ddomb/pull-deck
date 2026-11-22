@@ -241,16 +241,28 @@ export async function openOneById(id, options = {}) {
 /**
  * The shortcut URL: strict, because one match opens on its own.
  *
- * My scopes come first, unchanged. Only when they have nothing does GitHub get
- * asked, for one number or one ticket. Those hits ride back in this reply and
- * nowhere else: they never join the snapshot that the popup, the menu bar app
- * and the mods draw.
+ * My scopes come first. Only when they have nothing does GitHub get asked, for
+ * one number or one ticket. Those hits ride back in this reply and nowhere
+ * else: they never join the snapshot that the popup, the menu bar app and the
+ * mods draw.
+ *
+ * Speed: a PR number names one PR however old the list is, so a number in my
+ * scopes opens without waiting for a refresh. A ticket still waits, because an
+ * old list could miss its second PR. When the current list has nothing, the
+ * GitHub lookup runs alongside that refresh rather than after it.
  */
 export async function resolveShortcut(query) {
+  const lookup = outsideQuery(query);
+  let early = null;
+  if (lookup) {
+    const now = await matchSnapshot(query, findMatches, { refresh: false });
+    if (lookup.kind === 'number' && (now.status === 'one' || now.status === 'many'))
+      return { ...now, stale: false };
+    if (now.status === 'none') early = lookupOutside(lookup);
+  }
   const result = await matchSnapshot(query, findMatches);
-  const lookup = result.status === 'none' ? outsideQuery(query) : null;
-  if (!lookup) return result;
-  const found = await lookupOutside(lookup);
+  if (!lookup || result.status !== 'none') return result;
+  const found = await (early ?? lookupOutside(lookup));
   if (found.problem) return { ...result, lookup: found.problem };
   const matches = (
     lookup.kind === 'ticket' ? ticketHits(lookup.ticket, found.pullRequests) : found.pullRequests
@@ -290,8 +302,8 @@ export function openShortcut({ prId, outside }, options = {}) {
 /** The search box (popup, menu bar app, Claude mod): ranked, it only lists. */
 export const searchPullRequests = (query) => matchSnapshot(query, searchMatches);
 
-async function matchSnapshot(query, match) {
-  const state = await loadState({ branches: true });
+async function matchSnapshot(query, match, { refresh = true } = {}) {
+  const state = refresh ? await loadState({ branches: true }) : await stateFrom();
   if (state.stage === 'onboarding') return { query, status: 'noToken', matches: [], all: [] };
   if (state.stage === 'error')
     return { query, status: 'error', error: state.error, matches: [], all: [] };

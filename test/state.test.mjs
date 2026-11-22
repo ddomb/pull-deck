@@ -311,3 +311,59 @@ test('an outside open only builds github.com pull request URLs', async () => {
   ])
     await assert.rejects(openShortcut({ prId: 'x', outside }), /No valid pull request/);
 });
+
+/* ------------------------------------------------ shortcut speed, 3B -- */
+
+const oldList = () => fakeChrome({ cache: cached({ fetchedAt: Date.now() - 120_000 }) });
+
+test('a PR number in my scopes opens from an old list without waiting for a refresh', async () => {
+  const h = oldList();
+  const result = await resolveShortcut('1');
+  assert.equal(result.status, 'one');
+  assert.equal(result.stale, false, 'a number names one PR however old the list is');
+  assert.equal(h.calls.fetches, 0);
+});
+
+test('an outside lookup runs alongside the refresh of an old list', async () => {
+  const h = oldList(),
+    gate = deferred(),
+    order = [];
+  const lookup = lookupFetch();
+  globalThis.fetch = async (url, options) => {
+    if (options.body.includes('query PullDeck(')) {
+      order.push('refresh started');
+      await gate.promise;
+      order.push('refresh done');
+      h.calls.fetches++;
+      return githubResponse();
+    }
+    order.push('lookup');
+    return lookup(url, options);
+  };
+  const pending = resolveShortcut('ABV-13945');
+  await tick();
+  await tick();
+  assert.deepEqual(order.slice().sort(), ['lookup', 'refresh started']);
+  gate.resolve();
+  const result = await pending;
+  assert.equal(result.matches[0].number, 14561);
+  assert.equal(h.calls.fetches, 1);
+});
+
+test('a refreshed list that now holds the ticket wins over the lookup', async () => {
+  oldList();
+  const mine = pullRequest({ id: 'mine-1', number: 77, headRefName: 'me/abv-13945-fix' });
+  const lookup = lookupFetch();
+  globalThis.fetch = async (url, options) =>
+    options.body.includes('query PullDeck(')
+      ? githubResponse('old-user', {
+          mine: { nodes: [mine], pageInfo: { hasNextPage: false } },
+        })
+      : lookup(url, options);
+  const result = await resolveShortcut('ABV-13945');
+  assert.deepEqual(
+    result.matches.map((pr) => pr.id),
+    ['mine-1']
+  );
+  assert.equal(result.outside, undefined);
+});
