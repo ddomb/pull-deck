@@ -25,9 +25,12 @@ import {
   age,
 } from './model.js'
 import { CURL, curlArgs, defaultSocket, fromCurl } from './relay.js'
+import { collapser } from './collapse.js'
 
 const EVERY_MS = 15_000
 const FOLDED = 160
+// Folded height: the 41px header plus the 1px top border.
+const COLLAPSED_PX = 42
 const ICON = name => `mods/workspace-chrome/${name}.svg`
 const ALL_FIELDS = ['repo', 'age', 'review', 'ci', 'diff']
 
@@ -49,6 +52,7 @@ export default class PullDeck extends View {
     this.said = null
     this.width = null
     this.inputFocused = false
+    this.collapse = collapser('pull-deck', COLLAPSED_PX, { weight: 1 })
     this.handle = cx.focus_handle()
     this.scroll = ScrollHandle.new()
     this.input = InputState.new({ placeholder: 'Search: ABV-10637, 11780, words' })
@@ -63,6 +67,7 @@ export default class PullDeck extends View {
       cx.notify()
     })
     if (checking()) return
+    this.collapse.apply()
     cx.timer.every(Number(props()?.every) || EVERY_MS, cx => this.reload(cx))
     // Ages ("5m") move on their own; a slow redraw keeps them honest without polling anything.
     cx.timer.every(60_000, cx => cx.notify())
@@ -270,6 +275,7 @@ export default class PullDeck extends View {
     if (this.width !== null && this.width < FOLDED) return root.items_center().justify_center().child(this.rail(t))
     const snap = this.snapshot
     root.child(this.header(t, snap))
+    if (this.collapse.collapsed()) return root
     if (!snap) return root.child(this.notice(t, 'Loading…', 'Asking the Pull Deck bridge for your pull requests.'))
     if (snap.kind === 'down') return root.child(this.notice(t, 'Not connected', snap.reason, 'working', true))
     if (snap.kind === 'onboarding')
@@ -356,6 +362,24 @@ export default class PullDeck extends View {
           })
           .child(svg(ICON('clock')).size(13)),
       )
+      .child(this.foldButton(t))
+  }
+
+  /** "−" folds the block down to this header, "+" unfolds it. */
+  foldButton(t) {
+    const collapsed = this.collapse.collapsed()
+    return div()
+      .id('pd-collapse')
+      .text_color(t.dim)
+      .cursor_pointer()
+      .hover(s => s.text_color(t.foreground))
+      .tooltip(collapsed ? 'Expand' : 'Collapse')
+      .on_click((_e, cx) => {
+        cx.stop_propagation()
+        this.collapse.toggle()
+        cx.notify()
+      })
+      .child(svg(ICON(collapsed ? 'plus' : 'minus')).size(13))
   }
 
   notice(t, title, body, tone, retry = false) {
