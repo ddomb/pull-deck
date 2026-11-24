@@ -1,0 +1,40 @@
+{
+  "manifestVersion": 2,
+  "id": "pull-deck",
+  "name": "Pull Deck",
+  "version": "0.1.0",
+  "description": "Your open GitHub pull requests in Orca's sidebar, from the Pull Deck extension's relay. A click opens one in the browser's tab group.",
+  "engines": {
+    "orca": ">=1.4.248"
+  },
+  "execution": "trusted-worker",
+  "pluginApi": 1,
+  "main": "src/worker.ts",
+  "contributes": {
+    "panels": [
+      {
+        "id": "pull-deck",
+        "title": "Pull Deck",
+        "icon": "branch",
+        "entry": "src/panel.tsx",
+        "ui": "components"
+      }
+    ],
+    "commands": [
+      {
+        "id": "sidebar",
+        "title": "Pull Deck: Show or hide the right sidebar",
+        "action": "sidebar.right.toggle"
+      }
+    ],
+    "statusBarItems": [
+      {
+        "id": "count",
+        "text": "Pull Deck",
+        "icon": "branch",
+        "tooltip": "Pull Deck: loading",
+        "command": "sidebar"
+      }
+    ]
+  }
+}
